@@ -1,2 +1,2 @@
 # Locked-In
-NwHacks2025 Project
+NwHacks2026 Project
