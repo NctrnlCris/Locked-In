@@ -318,6 +318,7 @@ class CustomSetupPage(QWidget):
         self.question_label.setText(f"Question {self.current_question_index + 1}/{len(SETUP_QUESTIONS)}:\n{question}")
         
         # Check if this is a whitelist/blacklist question (indices 4 and 5)
+        # Question 4 = whitelist (keyword input), Question 5 = blacklist (keyword input)
         is_keyword_question = self.current_question_index in [4, 5]
         
         if is_keyword_question:
@@ -417,6 +418,7 @@ class CustomSetupPage(QWidget):
         profile_name = getattr(self.parent_window, 'profile_name', 'Profile')
         
         # Get whitelist and blacklist from keywords dictionary
+        # Question 4 = whitelist (index 4), Question 5 = blacklist (index 5)
         whitelist_question = SETUP_QUESTIONS[4] if len(SETUP_QUESTIONS) > 4 else None
         blacklist_question = SETUP_QUESTIONS[5] if len(SETUP_QUESTIONS) > 5 else None
         

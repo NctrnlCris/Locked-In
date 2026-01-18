@@ -30,6 +30,23 @@ except ImportError:
     def get_profiles_index(): return {"profiles": []}
     SetupWindow = None
 
+# Import process monitoring and popup
+try:
+    from process_monitor import get_foreground_process_name, is_browser, is_in_blacklist
+    from penguin_popup import PenguinPopup
+    from screenshot_capture import capture_multiple_screenshots
+    PROCESS_MONITOR_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Process monitoring modules not available: {e}")
+    def get_foreground_process_name(): 
+        print("Warning: get_foreground_process_name() fallback used - modules not installed")
+        return None
+    def is_browser(name): return False
+    def is_in_blacklist(name, blacklist): return False
+    def capture_multiple_screenshots(count=3, duration=5): return []
+    PenguinPopup = None
+    PROCESS_MONITOR_AVAILABLE = False
+
 # --- UI Constants ---
 DARK_GREEN = "#0E6B4F"
 LIGHT_GRAY = "#F2F2F2"
@@ -131,6 +148,10 @@ class MainPage(QWidget):
     def __init__(self):
         super().__init__()
         self.setStyleSheet("background-color: white;")
+        self.monitoring_timer = QTimer()
+        self.monitoring_timer.timeout.connect(self.check_current_process)
+        self.is_monitoring = False
+        self.current_popup = None  # Track current popup to prevent duplicates
         
         # Main Layout: Sidebar + Content
         self.root = QHBoxLayout(self)
@@ -273,6 +294,9 @@ class MainPage(QWidget):
         prompt = QLabel("Start session?")
         prompt.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {DARK_GREEN}; margin-top: 20px;")
 
+        # Button container for Start/Stop buttons
+        button_container = QHBoxLayout()
+        
         self.start_btn = QPushButton("Start")
         self.start_btn.setFixedSize(100, 45)
         self.start_btn.setStyleSheet(f"""
@@ -284,11 +308,33 @@ class MainPage(QWidget):
                 font-weight: bold;
             }}
         """)
+        self.start_btn.clicked.connect(self.start_monitoring_session)
+        
+        self.stop_btn = QPushButton("Stop")
+        self.stop_btn.setFixedSize(100, 45)
+        self.stop_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #CC0000;
+                color: white;
+                border-radius: 20px;
+                font-size: 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #AA0000;
+            }}
+        """)
+        self.stop_btn.clicked.connect(self.stop_monitoring_session)
+        self.stop_btn.setEnabled(False)  # Disabled by default
+        
+        button_container.addWidget(self.start_btn)
+        button_container.addWidget(self.stop_btn)
+        button_container.setSpacing(10)
 
         text_layout.addWidget(self.greet)
         text_layout.addWidget(self.streak)
         text_layout.addWidget(prompt)
-        text_layout.addWidget(self.start_btn)
+        text_layout.addLayout(button_container)
         card_layout.addLayout(text_layout)
         
         content_container.addSpacing(20)
@@ -326,6 +372,123 @@ class MainPage(QWidget):
         if hasattr(main_window, 'profile_page'):
             main_window.profile_page.refresh_profiles()
             main_window.stacked_widget.setCurrentIndex(0)
+    
+    def start_monitoring_session(self):
+        """Start continuous monitoring of the user's activity"""
+        main_window = self.window()
+        
+        # Check if already monitoring
+        if self.is_monitoring:
+            return
+        
+        # Check if profile is loaded
+        if not main_window.profile_data:
+            QMessageBox.warning(self, "No Profile", "Please select a profile first.")
+            return
+        
+        # Check if process monitoring is available
+        if not PROCESS_MONITOR_AVAILABLE:
+            QMessageBox.warning(self, "Dependencies Missing", 
+                               "Process monitoring requires psutil and pywin32.\n\n"
+                               "Please install them with:\n"
+                               "pip install psutil pywin32")
+            return
+        
+        # Start the monitoring timer (check every 2 seconds)
+        self.monitoring_timer.start(2000)  # 2000ms = 2 seconds
+        self.is_monitoring = True
+        
+        # Update button states
+        self.start_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        
+        # Do an initial check immediately
+        self.check_current_process()
+        
+        print("[DEBUG] Monitoring started - checking every 2 seconds")
+    
+    def stop_monitoring_session(self):
+        """Stop the continuous monitoring"""
+        if not self.is_monitoring:
+            return
+        
+        self.monitoring_timer.stop()
+        self.is_monitoring = False
+        
+        # Update button states
+        self.start_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        
+        print("[DEBUG] Monitoring stopped")
+    
+    def check_current_process(self):
+        """Check the current foreground process - called by timer"""
+        main_window = self.window()
+        
+        if not main_window.profile_data:
+            self.stop_monitoring_session()
+            return
+        
+        # Get blacklist from profile
+        blacklist = main_window.profile_data.get("blacklist", [])
+        
+        # Check current foreground process
+        process_name = get_foreground_process_name()
+        
+        if not process_name:
+            # Silently skip if we can't detect process (don't spam error messages)
+            return
+        
+        # Check if process is in blacklist
+        if is_in_blacklist(process_name, blacklist):
+            print(f"[DEBUG] Process '{process_name}' matched blacklist!")
+            # Only show popup if one isn't already showing
+            if self.current_popup is None or not self.current_popup.isVisible():
+                self.show_penguin_popup(process_name, blacklist)
+            return
+        
+        # Check if it's a browser - if so, we need to check for unproductive sites
+        if is_browser(process_name):
+            # Capture 3 screenshots over 5 seconds for browser analysis
+            # Note: This runs in background, we don't block here
+            screenshots = capture_multiple_screenshots(count=3, duration_seconds=5)
+            
+            # #TODO: Call model with screenshots to check if user is being unproductive
+            # #TODO: from model_handler import check_unproductive_activity
+            # #TODO: Pass the screenshots to the model for analysis
+            # #TODO: is_unproductive = check_unproductive_activity(screenshots)
+            # 
+            # #TODO: The model should analyze the screenshots to detect:
+            # #TODO: - YouTube, social media sites, distracting content
+            # #TODO: - Compare against blacklist URLs/domains
+            # #TODO: - Return True if unproductive activity detected
+            # 
+            # #TODO: If model determines unproductive, show penguin popup
+            # #TODO: if is_unproductive:
+            # #TODO:     self.show_penguin_popup(process_name, blacklist)
+            
+            print(f"[DEBUG] Browser detected: {process_name} - Screenshots captured for analysis")
+    
+    def show_penguin_popup(self, process_name, blacklist):
+        """Show the penguin popup when user is being unproductive"""
+        if PenguinPopup is None:
+            QMessageBox.warning(self, "Error", "Penguin popup not available.")
+            return
+        
+        # Close existing popup if any
+        if self.current_popup is not None:
+            try:
+                self.current_popup.close()
+            except:
+                pass
+        
+        # Create and show new popup
+        self.current_popup = PenguinPopup()
+        self.current_popup.show()
+        self.current_popup.raise_()  # Bring to front
+        self.current_popup.activateWindow()  # Activate the window
+        
+        print(f"[DEBUG] Penguin popup shown for process: {process_name}")
 
 class MainWindow(QMainWindow):
     def __init__(self):
