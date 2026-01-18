@@ -89,4 +89,23 @@ def classify_process(process_name, config=None):
     except Exception as e:
         print(f"Error classifying process {process_name}: {e}")
         return 'unknown'
+def is_in_whitelist(process_name, whitelist):
+    """Check if process name is in the whitelist"""
+    if not process_name or not whitelist:
+        return False
+    process_lower = process_name.lower()
+    
+    # Check if any whitelist item matches the process name
+    for whitelist_item in whitelist:
+        whitelist_lower = whitelist_item.lower()
+        # Remove .exe extension from process name for comparison
+        process_base = process_lower.replace('.exe', '')
+        whitelist_base = whitelist_lower.replace('.exe', '')
+        
+        # Match if the base names are equal or if one contains the other
+        if process_base == whitelist_base or whitelist_base in process_base or process_base in whitelist_base:
+            print(f"[DEBUG] Matched: process='{process_name}' (base: '{process_base}') with whitelist item='{whitelist_item}' (base: '{whitelist_base}')")
+            return True
+    
+    return False
 

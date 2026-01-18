@@ -1,11 +1,13 @@
 import json
 import sys
 from pathlib import Path
+from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QPushButton, QLabel, QStackedWidget, QMessageBox, 
-                             QHBoxLayout, QListWidget, QListWidgetItem, QFrame)
-from PyQt6.QtCore import QTimer, QSize, Qt
-from PyQt6.QtGui import QPixmap, QIcon
+                             QHBoxLayout, QListWidget, QListWidgetItem, QFrame,
+                             QSlider, QScrollArea, QAbstractButton)
+from PyQt6.QtCore import QTimer, QSize, Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, pyqtProperty
+from PyQt6.QtGui import QPixmap, QIcon, QMouseEvent, QPainter, QBrush, QColor, QPen
 
 # --- Keep your original file paths and logic ---
 CONFIG_FILE = Path("config.json")
@@ -20,10 +22,11 @@ except ImportError:
     def check_distraction(x): return False
     def capture_screenshot(): pass
 
-# Import profile management
+# Import profile management and sessions
 try:
     from profile_manager import get_all_profiles, load_profile, get_profiles_index
     from setup_window import SetupWindow
+    from sessions_manager import save_session, get_all_sessions
 except ImportError:
     def get_all_profiles(): return []
     def load_profile(name): return None
@@ -46,6 +49,7 @@ except ImportError as e:
     def is_browser(name): return False
     def is_in_blacklist(name, blacklist): return False
     def classify_process(name, config=None): return 'unknown'
+    def is_in_whitelist(name, whitelist): return False
     def capture_multiple_screenshots(count=3, duration=5): return []
     def capture_single_screenshot(): return None
     PenguinPopup = None
@@ -68,6 +72,87 @@ except ImportError as e:
 DARK_GREEN = "#0E6B4F"
 LIGHT_GRAY = "#F2F2F2"
 ACCENT_BLUE = "#00A3FF"
+
+class ToggleSwitch(QWidget):
+    """Custom toggle switch widget"""
+    toggled = pyqtSignal(bool)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.is_on = False
+        self.setFixedSize(70, 35)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        # Animation for circle position
+        self._circle_x = 3.0 + 2.0  # Starting position (left)
+        self.animation = QPropertyAnimation(self, b"circleX")
+        self.animation.setDuration(200)  # 200ms animation
+        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+    
+    @pyqtProperty(float)
+    def circleX(self):
+        return self._circle_x
+    
+    @circleX.setter
+    def circleX(self, value):
+        self._circle_x = value
+        self.update()
+    
+    def paintEvent(self, event):
+        """Draw the toggle switch with circle"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw background track
+        track_height = 30
+        track_y = (self.height() - track_height) // 2
+        
+        if self.is_on:
+            painter.setBrush(QBrush(QColor(DARK_GREEN)))
+        else:
+            painter.setBrush(QBrush(QColor("#D0D0D0")))
+        painter.drawRoundedRect(2, track_y, self.width() - 4, track_height, 15, 15)
+        
+        # Draw circle with shadow effect (use animated position)
+        circle_size = 26
+        circle_y = (self.height() - circle_size) // 2
+        x_pos = int(self._circle_x)
+        
+        # Draw shadow
+        painter.setBrush(QBrush(QColor(0, 0, 0, 30)))
+        painter.drawEllipse(x_pos + 1, circle_y + 1, circle_size, circle_size)
+        
+        # Draw circle
+        painter.setBrush(QBrush(QColor("white")))
+        painter.setPen(QPen(QColor(220, 220, 220)))  # Light gray border
+        painter.drawEllipse(x_pos, circle_y, circle_size, circle_size)
+        
+        super().paintEvent(event)
+    
+    def mousePressEvent(self, event):
+        self.toggle()
+        super().mousePressEvent(event)
+    
+    def toggle(self):
+        self.is_on = not self.is_on
+        
+        # Animate circle position
+        circle_size = 26
+        margin = 3
+        if self.is_on:
+            target_x = self.width() - circle_size - margin - 2
+        else:
+            target_x = margin + 2
+        
+        self.animation.setStartValue(self._circle_x)
+        self.animation.setEndValue(float(target_x))
+        self.animation.start()
+        
+        self.toggled.emit(self.is_on)
+    
+    def setChecked(self, checked):
+        if self.is_on != checked:
+            self.toggle()
 
 class ProfileSelectionPage(QWidget):
     def __init__(self, stacked_widget):
@@ -167,6 +252,8 @@ class MainPage(QWidget):
         self.setStyleSheet("background-color: white;")
         self.monitoring_timer = QTimer()
         self.monitoring_timer.timeout.connect(self.check_current_process)
+        self.session_timer = QTimer()
+        self.session_timer.timeout.connect(self.update_session_timer)
         self.is_monitoring = False
         self.current_popup = None  # Track current popup to prevent duplicates
         self.previous_process_name = None  # Track previous process to detect changes
@@ -188,6 +275,12 @@ class MainPage(QWidget):
             self.config = None
             self.mixed_process_monitor = None
         
+        # Session tracking
+        self.session_start_time = None
+        self.session_elapsed_seconds = 0
+        self.session_popup_count = 0  # Count how many times popup was shown
+        self.session_distraction_count = 0  # Count distractions detected
+        
         # Main Layout: Sidebar + Content
         self.root = QHBoxLayout(self)
         self.root.setContentsMargins(0, 0, 0, 0)
@@ -199,7 +292,6 @@ class MainPage(QWidget):
         self.sidebar.setStyleSheet(f"""
             QFrame {{
                 background-color: {LIGHT_GRAY};
-                border-right: 2px solid {ACCENT_BLUE};
             }}
             QListWidget {{
                 background: transparent;
@@ -235,21 +327,26 @@ class MainPage(QWidget):
         sidebar_layout.addSpacing(20)
 
         self.nav = QListWidget()
+        self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) 
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         items = [
             ("Home", "assets/house.png"),
             ("Sessions", "assets/sessions.png"),
-            ("Insights", "assets/insights.png"),
-            ("The Glacier", "assets/glacier.png")
+            ("Insights", "assets/insights.png")
         ]
         for text, icon_path in items:
             item = QListWidgetItem(QIcon(icon_path), text)
             self.nav.addItem(item)
+        
+        # Make Sessions clickable to navigate to sessions page
+        self.nav.itemClicked.connect(self.on_nav_item_clicked)
         
         sidebar_layout.addWidget(self.nav)
         sidebar_layout.addStretch()
         
         # Bottom Settings and Profile Management
         settings_container = QWidget()
+        settings_container.setStyleSheet(f"background-color: {LIGHT_GRAY}; border-radius: 10px; padding: 5px;")
         settings_layout = QVBoxLayout(settings_container)
         
         # Current profile display
@@ -298,7 +395,7 @@ class MainPage(QWidget):
         # Header Row
         header_layout = QHBoxLayout()
         header = QLabel("Home")
-        header.setStyleSheet(f"font-size: 32px; font-weight: bold; color: {DARK_GREEN};")
+        header.setStyleSheet(f"font-size: 32px; font-weight: bold; color: {DARK_GREEN}; background: transparent;")
         header_layout.addWidget(header)
         header_layout.addStretch()
         
@@ -323,62 +420,38 @@ class MainPage(QWidget):
         self.greet = QLabel("Hey, user!")
         self.greet.setStyleSheet(f"font-size: 36px; font-weight: bold; color: {DARK_GREEN};")
         
-        self.streak = QLabel("❄️ 134 Streak Count")
+        # Session timer (replaces streak count)
+        self.streak = QLabel("00:00:00")
         self.streak.setStyleSheet(f"font-size: 18px; color: {DARK_GREEN};")
+        self.streak.hide()  # Hidden until session starts
 
         prompt = QLabel("Start session?")
         prompt.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {DARK_GREEN}; margin-top: 20px;")
 
-        # Button container for Start/Stop buttons
-        button_container = QHBoxLayout()
+        # Toggle switch container
+        toggle_container = QHBoxLayout()
+        toggle_container.addStretch()
         
-        self.start_btn = QPushButton("Start")
-        self.start_btn.setFixedSize(100, 45)
-        self.start_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {DARK_GREEN};
-                color: white;
-                border-radius: 20px;
-                font-size: 16px;
-                font-weight: bold;
-            }}
-        """)
-        self.start_btn.clicked.connect(self.start_monitoring_session)
+        self.toggle_switch = ToggleSwitch()
+        self.toggle_switch.toggled.connect(self.on_toggle_switched)
+        toggle_container.addWidget(self.toggle_switch)
+        toggle_container.addStretch()
         
-        self.stop_btn = QPushButton("Stop")
-        self.stop_btn.setFixedSize(100, 45)
-        self.stop_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #CC0000;
-                color: white;
-                border-radius: 20px;
-                font-size: 16px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: #AA0000;
-            }}
-        """)
-        self.stop_btn.clicked.connect(self.stop_monitoring_session)
-        self.stop_btn.setEnabled(False)  # Disabled by default
-        
-        button_container.addWidget(self.start_btn)
-        button_container.addWidget(self.stop_btn)
-        button_container.setSpacing(10)
-
         text_layout.addWidget(self.greet)
-        text_layout.addWidget(self.streak)
+        text_layout.addWidget(self.streak)  # Timer label (replaces streak)
         text_layout.addWidget(prompt)
-        text_layout.addLayout(button_container)
+        text_layout.addLayout(toggle_container)
         card_layout.addLayout(text_layout)
         
         content_container.addSpacing(20)
         content_container.addWidget(self.card)
         
-        view_more = QLabel("view more sessions >>")
-        view_more.setAlignment(Qt.AlignmentFlag.AlignRight)
-        view_more.setStyleSheet(f"color: {DARK_GREEN}; font-weight: bold;")
-        content_container.addWidget(view_more)
+        self.view_more_link = QLabel("view more sessions >>")
+        self.view_more_link.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.view_more_link.setStyleSheet(f"color: {DARK_GREEN}; font-weight: bold; background-color: transparent;")
+        self.view_more_link.mousePressEvent = lambda e: self.show_sessions_history()
+        self.view_more_link.setCursor(Qt.CursorShape.PointingHandCursor)
+        content_container.addWidget(self.view_more_link)
         
         content_container.addStretch()
         self.root.addLayout(content_container, 1)
@@ -408,6 +481,32 @@ class MainPage(QWidget):
             main_window.profile_page.refresh_profiles()
             main_window.stacked_widget.setCurrentIndex(0)
     
+    def on_nav_item_clicked(self, item):
+        """Handle navigation item clicks"""
+        text = item.text()
+        main_window = self.window()
+        
+        if text == "Sessions":
+            if hasattr(main_window, 'sessions_page'):
+                main_window.stacked_widget.setCurrentWidget(main_window.sessions_page)
+                main_window.sessions_page.refresh_sessions()
+        # Home and Insights can be handled later if needed
+    
+    def on_toggle_switched(self, is_on):
+        """Handle toggle switch change"""
+        if is_on:
+            self.start_monitoring_session()
+        else:
+            self.stop_monitoring_session()
+    
+    def update_session_timer(self):
+        """Update the session timer display"""
+        self.session_elapsed_seconds += 1
+        hours = self.session_elapsed_seconds // 3600
+        minutes = (self.session_elapsed_seconds % 3600) // 60
+        seconds = self.session_elapsed_seconds % 60
+        self.streak.setText(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+    
     def start_monitoring_session(self):
         """Start continuous monitoring of the user's activity"""
         main_window = self.window()
@@ -419,6 +518,7 @@ class MainPage(QWidget):
         # Check if profile is loaded
         if not main_window.profile_data:
             QMessageBox.warning(self, "No Profile", "Please select a profile first.")
+            self.toggle_switch.setChecked(False)
             return
         
         # Check if process monitoring is available
@@ -427,15 +527,23 @@ class MainPage(QWidget):
                                "Process monitoring requires psutil and pywin32.\n\n"
                                "Please install them with:\n"
                                "pip install psutil pywin32")
+            self.toggle_switch.setChecked(False)
             return
         
-        # Start the monitoring timer (check every 2 seconds)
-        self.monitoring_timer.start(2000)  # 2000ms = 2 seconds
+        # Initialize session tracking
+        self.session_start_time = datetime.now()
+        self.session_elapsed_seconds = 0
+        self.session_popup_count = 0
+        self.session_distraction_count = 0
+        
+        # Start timers
+        self.monitoring_timer.start(2000)  # Check every 2 seconds
+        self.session_timer.start(1000)  # Update timer every 1 second
         self.is_monitoring = True
         
-        # Update button states
-        self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(True)
+        # Show timer
+        self.streak.show()
+        self.streak.setText("00:00:00")
         
         # Do an initial check immediately
         self.check_current_process()
@@ -443,11 +551,12 @@ class MainPage(QWidget):
         print("[DEBUG] Monitoring started - checking every 2 seconds")
     
     def stop_monitoring_session(self):
-        """Stop the continuous monitoring"""
+        """Stop the continuous monitoring and save session"""
         if not self.is_monitoring:
             return
         
         self.monitoring_timer.stop()
+        self.session_timer.stop()
         self.is_monitoring = False
         
         # Reset tracking variables
@@ -461,6 +570,34 @@ class MainPage(QWidget):
         # Update button states
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        # Hide timer
+        self.streak.hide()
+        self.streak.setText("00:00:00")
+        
+        # Save session data
+        if self.session_start_time:
+            duration_seconds = self.session_elapsed_seconds
+            hours = duration_seconds // 3600
+            minutes = (duration_seconds % 3600) // 60
+            seconds = duration_seconds % 60
+            duration_str = f"{hours}:{minutes:02d}:{seconds:02d}" if hours > 0 else f"{minutes}:{seconds:02d}"
+            
+            main_window = self.window()
+            session_data = {
+                "profile": main_window.current_profile or "Unknown",
+                "start_time": self.session_start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "end_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "duration": duration_str,
+                "duration_seconds": duration_seconds,
+                "distraction_count": self.session_distraction_count,
+                "popup_click_count": self.session_popup_count  # Track clicks from popups
+            }
+            
+            try:
+                save_session(session_data)
+                print(f"[DEBUG] Session saved: {duration_str}, {self.session_distraction_count} distractions")
+            except Exception as e:
+                print(f"[ERROR] Failed to save session: {e}")
         
         print("[DEBUG] Monitoring stopped - all timers reset")
     
@@ -493,8 +630,9 @@ class MainPage(QWidget):
             self.stop_monitoring_session()
             return
         
-        # Get blacklist from profile
+        # Get blacklist and whitelist from profile
         blacklist = main_window.profile_data.get("blacklist", [])
+        whitelist = main_window.profile_data.get("whitelist", [])
         
         # Check current foreground process
         process_name = get_foreground_process_name()
@@ -845,13 +983,163 @@ class MainPage(QWidget):
             except:
                 pass
         
+        # Track distraction
+        self.session_distraction_count += 1
+        
         # Create and show new popup
         self.current_popup = PenguinPopup()
         self.current_popup.show()
         self.current_popup.raise_()  # Bring to front
         self.current_popup.activateWindow()  # Activate the window
         
+        # Track popup shown count (for click counting later)
+        self.session_popup_count += 1
+        
         print(f"[DEBUG] Penguin popup shown for process: {process_name}")
+    
+    def show_sessions_history(self):
+        """Navigate to sessions history page"""
+        main_window = self.window()
+        if hasattr(main_window, 'sessions_page'):
+            main_window.stacked_widget.setCurrentWidget(main_window.sessions_page)
+            main_window.sessions_page.refresh_sessions()
+
+class SessionsHistoryPage(QWidget):
+    """Page displaying session history"""
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+    
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(40, 30, 40, 30)
+        self.setStyleSheet(f"background-color: {LIGHT_GRAY};")
+        
+        # Header
+        header_layout = QHBoxLayout()
+        title = QLabel("Sessions History")
+        title.setStyleSheet(f"font-size: 32px; font-weight: bold; color: {DARK_GREEN}; background-color: transparent;")
+        
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        
+        # Back button
+        back_btn = QPushButton("← Back to Home")
+        back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {DARK_GREEN};
+                color: white;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{ background-color: #0C5B44; }}
+        """)
+        back_btn.clicked.connect(self.go_back_home)
+        header_layout.addWidget(back_btn)
+        
+        layout.addLayout(header_layout)
+        layout.addSpacing(20)
+        
+        # Scroll area for sessions
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        self.sessions_container = QWidget()
+        self.sessions_layout = QVBoxLayout(self.sessions_container)
+        self.sessions_layout.setSpacing(15)
+        
+        scroll.setWidget(self.sessions_container)
+        layout.addWidget(scroll)
+    
+    def refresh_sessions(self):
+        """Refresh the sessions list"""
+        # Clear existing sessions
+        while self.sessions_layout.count():
+            child = self.sessions_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        # Load sessions
+        try:
+            sessions = get_all_sessions()
+            if not sessions:
+                no_sessions = QLabel("No sessions yet. Start a monitoring session to see history here!")
+                no_sessions.setStyleSheet("font-size: 16px; color: gray; padding: 40px;")
+                no_sessions.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.sessions_layout.addWidget(no_sessions)
+            else:
+                for session in sessions:
+                    self.add_session_card(session)
+        except Exception as e:
+            print(f"[ERROR] Failed to load sessions: {e}")
+    
+    def add_session_card(self, session):
+        """Add a session card to the layout"""
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame {
+                background-color: transparent;
+                border: none;
+                padding: 15px 0px;
+            }
+        """)
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Icon (penguin for now - can be varied based on session type)
+        icon_label = QLabel()
+        icon_pix = QPixmap("assets/penguin.png").scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        icon_label.setPixmap(icon_pix)
+        icon_label.setStyleSheet("background-color: transparent;")
+        card_layout.addWidget(icon_label)
+        
+        # Session info
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(5)
+        
+        # Date and time
+        start_time = session.get("start_time", "")
+        date_label = QLabel(start_time)
+        date_label.setStyleSheet(f"font-size: 14px; color: {DARK_GREEN}; font-weight: bold; background-color: transparent;")
+        info_layout.addWidget(date_label)
+        
+        # Duration and metrics
+        metrics_layout = QHBoxLayout()
+        metrics_layout.setSpacing(15)
+        
+        duration = session.get("duration", "0:00")
+        duration_label = QLabel(f"⏱ {duration}")
+        duration_label.setStyleSheet(f"font-size: 12px; color: #7B2CBF; background-color: transparent;")
+        metrics_layout.addWidget(duration_label)
+        
+        distractions = session.get("distraction_count", 0)
+        if distractions > 0:
+            dist_label = QLabel(f"❄️ {distractions}")
+            dist_label.setStyleSheet(f"font-size: 12px; color: #0066CC; background-color: transparent;")
+            metrics_layout.addWidget(dist_label)
+        
+        popup_clicks = session.get("popup_click_count", 0)
+        # Always show popup clicks if there were any popups shown
+        if popup_clicks > 0:
+            clicks_label = QLabel(f"👆 {popup_clicks}")
+            clicks_label.setStyleSheet(f"font-size: 12px; color: #FF6B35; background-color: transparent;")
+            metrics_layout.addWidget(clicks_label)
+        
+        metrics_layout.addStretch()
+        info_layout.addLayout(metrics_layout)
+        
+        card_layout.addLayout(info_layout, 1)
+        
+        self.sessions_layout.addWidget(card)
+    
+    def go_back_home(self):
+        """Navigate back to home page"""
+        main_window = self.window()
+        if hasattr(main_window, 'main_page'):
+            main_window.stacked_widget.setCurrentWidget(main_window.main_page)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -866,9 +1154,11 @@ class MainWindow(QMainWindow):
 
         self.main_page = MainPage()
         self.profile_page = ProfileSelectionPage(self.stacked_widget)
+        self.sessions_page = SessionsHistoryPage()
 
         self.stacked_widget.addWidget(self.profile_page) # Index 0 - Profile selection
         self.stacked_widget.addWidget(self.main_page)    # Index 1 - Main page
+        self.stacked_widget.addWidget(self.sessions_page) # Index 2 - Sessions history
 
         # Load existing config or show profile selection
         profiles = get_all_profiles()

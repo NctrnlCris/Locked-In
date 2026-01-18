@@ -7,10 +7,12 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent
 PROFILES_DIR = BASE_DIR / "profiles"
 OUTPUT_DIR = BASE_DIR / "profile_output"
+SESSIONS_DIR = BASE_DIR / "sessions"
 
 # Create directories if they don't exist
 PROFILES_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
+SESSIONS_DIR.mkdir(exist_ok=True)
 
 # Profile file name
 DEFAULT_PROFILE_NAME = "user_profile.json"
