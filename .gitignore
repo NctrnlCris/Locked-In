@@ -1,0 +1,9 @@
+screenshot_data/
+_pycache_/
+profiles/
+profile_output/
+README.md
+config.json
+temp/screenshots/*.jpg
+temp/screenshots/*.JPG
+sessions/
