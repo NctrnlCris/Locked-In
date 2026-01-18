@@ -28,6 +28,16 @@ def get_foreground_process_name():
         print(f"Error getting foreground process: {e}")
         return None
 
+def get_foreground_window_title():
+    """Get the title of the currently active foreground window"""
+    try:
+        hwnd = win32gui.GetForegroundWindow()
+        window_title = win32gui.GetWindowText(hwnd)
+        return window_title
+    except Exception as e:
+        print(f"Error getting foreground window title: {e}")
+        return None
+
 def is_browser(process_name):
     """Check if the process is a browser"""
     if not process_name:
@@ -53,4 +63,30 @@ def is_in_blacklist(process_name, blacklist):
             return True
     
     return False
+
+def classify_process(process_name, config=None):
+    """
+    Classify a process using the Config system.
+    
+    Args:
+        process_name: Name of the process (e.g., 'chrome.exe')
+        config: Optional Config instance. If None, creates a new one.
+        
+    Returns:
+        Classification string: 'work', 'entertainment', 'mixed', or 'unknown'
+    """
+    if config is None:
+        try:
+            from scripts.utils.config import Config
+            config = Config()
+        except Exception as e:
+            print(f"Warning: Could not load Config for classification: {e}")
+            return 'unknown'
+    
+    try:
+        from scripts.utils.process_classifier import classify_process as _classify_process
+        return _classify_process(process_name, config)
+    except Exception as e:
+        print(f"Error classifying process {process_name}: {e}")
+        return 'unknown'
 
