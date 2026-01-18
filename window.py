@@ -61,12 +61,15 @@ try:
     from scripts.utils.mixed_process_monitor import MixedProcessMonitor
     from scripts.utils.config import Config
     from scripts.vlm.ministral_analyzer import analyze_screenshots
+    from scripts.utils.distraction_cache import get_cache
     CLASSIFICATION_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Classification/VLM modules not available: {e}")
     MixedProcessMonitor = None
     Config = None
     analyze_screenshots = None
+    def get_cache():
+        return None
     CLASSIFICATION_AVAILABLE = False
 
 # --- UI Constants ---
@@ -230,9 +233,46 @@ class ProfileSelectionPage(QWidget):
         # Save current profile to config
         with open(CONFIG_FILE, "w") as f:
             json.dump({"current_profile": profile_name}, f)
+        
+        # Apply profile-specific process classifications
+        self._apply_profile_classifications(main_window.profile_data)
+        
+        # Initialize distraction cache for this profile
+        main_window.main_page.distraction_cache = get_cache(profile_name)
 
         main_window.main_page.update_profile(profile_name)
         self.stacked_widget.setCurrentIndex(1)
+    
+    def _apply_profile_classifications(self, profile_data):
+        """Apply profile-specific process classifications to the Config."""
+        if not profile_data:
+            return
+        
+        try:
+            from scripts.utils.config import Config
+            config = Config()
+            
+            # Get profile's process classifications
+            process_classifications = profile_data.get('process_classifications')
+            
+            if process_classifications:
+                # Apply profile classifications as override
+                config.set_profile_classification_override(process_classifications)
+                print(f"[Profile] Applied process classifications from profile")
+                
+                # Log counts for debugging
+                work_count = len(process_classifications.get('work_processes', []))
+                mixed_count = len(process_classifications.get('mixed_processes', []))
+                ent_count = len(process_classifications.get('entertainment_processes', []))
+                print(f"[Profile] Classifications: {work_count} Work, {mixed_count} Mixed, {ent_count} Entertainment")
+            else:
+                # No profile classifications, use global config (this is normal for new profiles)
+                config.clear_profile_override()
+                # Only print in debug mode to avoid confusion - this is expected for new profiles
+                # print(f"[Profile] No profile classifications found, using global config")
+                
+        except Exception as e:
+            print(f"[Profile] Error applying classifications: {e}")
 
     def create_new_profile(self):
         """Open setup window to create a new profile"""
@@ -694,7 +734,9 @@ class MainPage(QWidget):
             self.mixed_process_monitor.reset()
         
         # Update toggle switch state
-        self.toggle_switch.setChecked(False)
+        if hasattr(self, 'toggle_switch'):
+            self.toggle_switch.setChecked(False)
+        
         # Hide timer
         self.streak.hide()
         self.streak.setText("00:00:00")
@@ -731,6 +773,7 @@ class MainPage(QWidget):
     def get_work_topic_from_profile(self) -> str:
         """
         Extract work topic from profile data.
+        Only uses Q3 response (work focus), never uses profile name.
         
         Returns:
             Work topic string, or default if not found
@@ -739,15 +782,15 @@ class MainPage(QWidget):
         if not main_window.profile_data:
             return "General work"
         
-        # Try to get from responses
+        # Only get from Q3 response - never use profile name
         responses = main_window.profile_data.get("responses", {})
         work_topic = responses.get("What are your main things you want to focus on?", "")
         
         if work_topic:
             return work_topic
         
-        # Fallback to profile name or default
-        return main_window.profile_data.get("name", "General work")
+        # Fallback to default - never use profile name
+        return "General work"
     
     def check_current_process(self):
         """Check the current foreground process - called by timer"""
@@ -854,7 +897,10 @@ class MainPage(QWidget):
                         # Take screenshot when Mixed process is first identified or window changes
                         try:
                             print(f"[SCREENSHOT] Capturing screenshot for newly detected Mixed process: {process_name}")
-                            screenshot_path = capture_single_screenshot()
+                            # Get config values for screenshot capture
+                            max_size = self.config.ollama_max_image_size if self.config else (512, 512)
+                            temp_folder = self.config.temp_folder if self.config else './temp/screenshots'
+                            screenshot_path = capture_single_screenshot(max_size=max_size, temp_folder=temp_folder)
                             if screenshot_path:
                                 print(f"[SCREENSHOT] Screenshot saved to: {screenshot_path}")
                             else:
@@ -879,11 +925,28 @@ class MainPage(QWidget):
                             self.mixed_process_monitor.reset()
                             return
                         
+                        # Check distraction cache before making LLM call
+                        main_window = self.window()
+                        profile_name = getattr(main_window, 'current_profile', None)
+                        distraction_cache = get_cache(profile_name) if profile_name else None
+                        if distraction_cache and distraction_cache.is_distracting(process_name, window_title):
+                            print(f"[CACHE] Found '{process_name}' with window '{window_title}' in distraction cache - skipping LLM call")
+                            print(f"[CACHE] Showing popup immediately based on cached result")
+                            self.last_analyzed_key = current_key
+                            self.last_analysis_result = True  # Mark as distracted
+                            if self.current_popup is None or not self.current_popup.isVisible():
+                                self.show_penguin_popup(process_name, [])
+                            self.mixed_process_monitor.reset()
+                            return
+                        
                         print(f"[DEBUG] Mixed process timer exceeded for: {process_name}")
                         # Capture screenshot and analyze with VLM
                         try:
                             print(f"[SCREENSHOT] Capturing screenshot for VLM analysis (timer exceeded): {process_name}")
-                            screenshot_path = capture_single_screenshot()
+                            # Get config values for screenshot capture
+                            max_size = self.config.ollama_max_image_size if self.config else (512, 512)
+                            temp_folder = self.config.temp_folder if self.config else './temp/screenshots'
+                            screenshot_path = capture_single_screenshot(max_size=max_size, temp_folder=temp_folder)
                             if screenshot_path:
                                 print(f"[SCREENSHOT] Screenshot saved to: {screenshot_path}")
                             else:
@@ -900,17 +963,43 @@ class MainPage(QWidget):
                                     context_info = f"Process: {process_name}"
                                     print(f"[VLM] Running VLM analysis for {process_name}...")
                                 
-                                result = analyze_screenshots(
-                                    image_paths=[str(screenshot_path)],
-                                    work_topic=work_topic,
-                                    additional_context=context_info,
-                                    debug_mode=True  # Enable debug mode to see reasoning
-                                )
+                                # Create cancellation callback that checks if page changed
+                                original_key = current_key
+                                def check_cancelled():
+                                    try:
+                                        current_process_check = get_foreground_process_name()
+                                        current_window_check = get_foreground_window_title() or ""
+                                        current_key_check = f"{current_process_check}|{current_window_check}"
+                                        return current_key_check != original_key
+                                    except:
+                                        return False
+                                
+                                try:
+                                    result = analyze_screenshots(
+                                        image_paths=[str(screenshot_path)],
+                                        work_topic=work_topic,
+                                        additional_context=context_info,
+                                        debug_mode=True,  # Enable debug mode to see reasoning
+                                        check_cancelled=check_cancelled
+                                    )
+                                except InterruptedError as e:
+                                    print(f"[VLM] Analysis cancelled: {e}")
+                                    # Reset timer and return early
+                                    self.mixed_process_monitor.reset()
+                                    return
                                 
                                 # Check if distracted
                                 if result.get('stage2', {}).get('distracted', False):
                                     confidence = result.get('stage2', {}).get('confidence', 0)
                                     print(f"[VLM] Detected distraction (confidence: {confidence}%)")
+                                    
+                                    # Add to distraction cache
+                                    main_window = self.window()
+                                    profile_name = getattr(main_window, 'current_profile', None)
+                                    distraction_cache = get_cache(profile_name) if profile_name else None
+                                    if distraction_cache:
+                                        distraction_cache.add_distracting(process_name, window_title)
+                                        print(f"[CACHE] Added '{process_name}' with window '{window_title}' to distraction cache for profile '{profile_name}'")
                                     
                                     # Verify we're still on the same distracting page before showing popup
                                     try:
@@ -1000,6 +1089,20 @@ class MainPage(QWidget):
                             self.mixed_process_monitor.reset()
                             return
                         
+                        # Check distraction cache before making LLM call
+                        main_window = self.window()
+                        profile_name = getattr(main_window, 'current_profile', None)
+                        distraction_cache = get_cache(profile_name) if profile_name else None
+                        if distraction_cache and distraction_cache.is_distracting(process_name, window_title):
+                            print(f"[CACHE] Found '{process_name}' with window '{window_title}' in distraction cache - skipping LLM call")
+                            print(f"[CACHE] Showing popup immediately based on cached result")
+                            self.last_analyzed_key = current_key
+                            self.last_analysis_result = True  # Mark as distracted
+                            if self.current_popup is None or not self.current_popup.isVisible():
+                                self.show_penguin_popup(process_name, [])
+                            self.mixed_process_monitor.reset()
+                            return
+                        
                         print(f"[DEBUG] Unknown process timer exceeded for: {process_name}")
                         # Capture screenshot and analyze with VLM
                         try:
@@ -1021,17 +1124,43 @@ class MainPage(QWidget):
                                     context_info = f"Process: {process_name}"
                                     print(f"[VLM] Running VLM analysis for {process_name}...")
                                 
-                                result = analyze_screenshots(
-                                    image_paths=[str(screenshot_path)],
-                                    work_topic=work_topic,
-                                    additional_context=context_info,
-                                    debug_mode=True  # Enable debug mode to see reasoning
-                                )
+                                # Create cancellation callback that checks if page changed
+                                original_key = current_key
+                                def check_cancelled():
+                                    try:
+                                        current_process_check = get_foreground_process_name()
+                                        current_window_check = get_foreground_window_title() or ""
+                                        current_key_check = f"{current_process_check}|{current_window_check}"
+                                        return current_key_check != original_key
+                                    except:
+                                        return False
+                                
+                                try:
+                                    result = analyze_screenshots(
+                                        image_paths=[str(screenshot_path)],
+                                        work_topic=work_topic,
+                                        additional_context=context_info,
+                                        debug_mode=True,  # Enable debug mode to see reasoning
+                                        check_cancelled=check_cancelled
+                                    )
+                                except InterruptedError as e:
+                                    print(f"[VLM] Analysis cancelled: {e}")
+                                    # Reset timer and return early
+                                    self.mixed_process_monitor.reset()
+                                    return
                                 
                                 # Check if distracted
                                 if result.get('stage2', {}).get('distracted', False):
                                     confidence = result.get('stage2', {}).get('confidence', 0)
                                     print(f"[VLM] Detected distraction (confidence: {confidence}%)")
+                                    
+                                    # Add to distraction cache
+                                    main_window = self.window()
+                                    profile_name = getattr(main_window, 'current_profile', None)
+                                    distraction_cache = get_cache(profile_name) if profile_name else None
+                                    if distraction_cache:
+                                        distraction_cache.add_distracting(process_name, window_title)
+                                        print(f"[CACHE] Added '{process_name}' with window '{window_title}' to distraction cache for profile '{profile_name}'")
                                     
                                     # Verify we're still on the same distracting page before showing popup
                                     try:
@@ -1078,7 +1207,10 @@ class MainPage(QWidget):
             # Capture 3 screenshots over 5 seconds for browser analysis
             # Note: This runs in background, we don't block here
             print(f"[SCREENSHOT] Capturing multiple screenshots for browser analysis: {process_name}")
-            screenshots = capture_multiple_screenshots(count=3, duration_seconds=5)
+            # Get config values for screenshot capture
+            max_size = self.config.ollama_max_image_size if self.config else (512, 512)
+            temp_folder = self.config.temp_folder if self.config else './temp/screenshots'
+            screenshots = capture_multiple_screenshots(count=3, duration_seconds=5, max_size=max_size, temp_folder=temp_folder)
             print(f"[SCREENSHOT] Captured {len(screenshots)} screenshots for browser analysis")
             
             # #TODO: Call model with screenshots to check if user is being unproductive
@@ -1298,6 +1430,13 @@ class MainWindow(QMainWindow):
                     self.profile_data = load_profile(current_profile)
                     self.main_page.update_profile(current_profile)
                     self.main_page.current_profile_label.setText(f"Profile: {current_profile}")
+                    
+                    # Apply profile-specific process classifications
+                    self._apply_profile_classifications(self.profile_data)
+                    
+                    # Initialize distraction cache for this profile
+                    self.main_page.distraction_cache = get_cache(current_profile)
+                    
                     self.stacked_widget.setCurrentIndex(1)
                 else:
                     # Invalid profile, show selector
@@ -1305,6 +1444,37 @@ class MainWindow(QMainWindow):
         else:
             # No profiles or no config, show selector
             self.stacked_widget.setCurrentIndex(0)
+    
+    def _apply_profile_classifications(self, profile_data):
+        """Apply profile-specific process classifications to the Config."""
+        if not profile_data:
+            return
+        
+        try:
+            from scripts.utils.config import Config
+            config = Config()
+            
+            # Get profile's process classifications
+            process_classifications = profile_data.get('process_classifications')
+            
+            if process_classifications:
+                # Apply profile classifications as override
+                config.set_profile_classification_override(process_classifications)
+                print(f"[Profile] Applied process classifications from profile")
+                
+                # Log counts for debugging
+                work_count = len(process_classifications.get('work_processes', []))
+                mixed_count = len(process_classifications.get('mixed_processes', []))
+                ent_count = len(process_classifications.get('entertainment_processes', []))
+                print(f"[Profile] Classifications: {work_count} Work, {mixed_count} Mixed, {ent_count} Entertainment")
+            else:
+                # No profile classifications, use global config (this is normal for new profiles)
+                config.clear_profile_override()
+                # Only print in debug mode to avoid confusion - this is expected for new profiles
+                # print(f"[Profile] No profile classifications found, using global config")
+                
+        except Exception as e:
+            print(f"[Profile] Error applying classifications: {e}")
     
     def closeEvent(self, event):
         """Handle window close event - cleanup screenshots and stop monitoring"""
@@ -1315,7 +1485,7 @@ class MainWindow(QMainWindow):
             self.main_page.monitoring_timer.stop()
             print("[CLEANUP] Stopped monitoring timer")
         
-        # Clear screenshot folder
+        # Clear screenshot folders (legacy screenshot_data and temp/screenshots)
         screenshot_dir = Path("screenshot_data")
         if screenshot_dir.exists() and screenshot_dir.is_dir():
             try:
@@ -1327,6 +1497,19 @@ class MainWindow(QMainWindow):
                 print(f"[CLEANUP] Cleared screenshot folder: {screenshot_dir}")
             except Exception as e:
                 print(f"[CLEANUP] Error clearing screenshot folder: {e}")
+        
+        # Also clear temp/screenshots folder
+        temp_screenshot_dir = Path("temp/screenshots")
+        if temp_screenshot_dir.exists() and temp_screenshot_dir.is_dir():
+            try:
+                # Remove all files in the temp screenshot directory
+                for file_path in temp_screenshot_dir.iterdir():
+                    if file_path.is_file():
+                        file_path.unlink()
+                        print(f"[CLEANUP] Deleted temp screenshot: {file_path.name}")
+                print(f"[CLEANUP] Cleared temp screenshot folder: {temp_screenshot_dir}")
+            except Exception as e:
+                print(f"[CLEANUP] Error clearing temp screenshot folder: {e}")
         
         # Close any open popups
         if hasattr(self.main_page, 'current_popup') and self.main_page.current_popup is not None:

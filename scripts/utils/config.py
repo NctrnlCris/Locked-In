@@ -425,12 +425,36 @@ class Config:
     
     def get_process_classification(self) -> Dict[str, Any]:
         """Get process classification configuration."""
+        # Return profile override if set, otherwise return global config
+        if hasattr(self, '_profile_classification_override') and self._profile_classification_override:
+            return self._profile_classification_override
+        
         return self._config.get('process_classification', {
             'work_processes': [],
             'entertainment_processes': [],
             'mixed_processes': [],
             'monitor_timeout': 2
         })
+    
+    def set_profile_classification_override(self, classifications: Optional[Dict[str, Any]]) -> None:
+        """
+        Set profile-specific process classifications that override global config.
+        
+        Args:
+            classifications: Dict with work_processes, mixed_processes, entertainment_processes
+                           Pass None to clear the override and use global config.
+        """
+        if classifications:
+            # Ensure monitor_timeout is preserved
+            if 'monitor_timeout' not in classifications:
+                classifications['monitor_timeout'] = self._config.get('process_classification', {}).get('monitor_timeout', 2)
+            self._profile_classification_override = classifications
+        else:
+            self._profile_classification_override = None
+    
+    def clear_profile_override(self) -> None:
+        """Clear any profile-specific overrides and use global config."""
+        self._profile_classification_override = None
     
     @property
     def monitor_timeout(self) -> int:

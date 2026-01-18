@@ -7,7 +7,7 @@ import logging
 import os
 import subprocess
 import time
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 from PIL import Image
 import requests
 
@@ -84,12 +84,8 @@ class OllamaClient:
         self.debug_mode = debug_mode
         self.auto_start = auto_start
         self.max_image_size = max_image_size if max_image_size is not None else (1080, 1080)
-        self.temp_folder = temp_folder or './temp/screenshots'
+        self.temp_folder = temp_folder or './temp/screenshots'  # Kept for backward compatibility but not used
         self._server_process: Optional[subprocess.Popen] = None
-        
-        # Ensure temp folder exists
-        if self.temp_folder:
-            os.makedirs(self.temp_folder, exist_ok=True)
         
         # Test connection on init, start server if needed
         if not self._check_server_connection():
@@ -366,11 +362,10 @@ class OllamaClient:
     def _encode_image_base64(self, image_path: str) -> str:
         """
         Encode image to base64 for Ollama API.
-        Resizes image to max_image_size before encoding to reduce token usage.
-        Saves rescaled image to temp/screenshots/ directory.
+        Image should already be resized at capture time, but we'll verify size here.
         
         Args:
-            image_path: Path to image file
+            image_path: Path to image file (should already be resized)
             
         Returns:
             Base64-encoded image string
@@ -379,9 +374,7 @@ class OllamaClient:
             OSError: If image file is corrupted, truncated, or cannot be opened
         """
         try:
-            from datetime import datetime
-            
-            # Load and resize image - handle truncated/corrupted images
+            # Load image - handle truncated/corrupted images
             try:
                 img = Image.open(image_path)
                 # Verify image is not truncated by loading it fully
@@ -393,22 +386,16 @@ class OllamaClient:
                     print(f"[Ollama] Error: {error_msg} - {str(e)}")
                 logger.warning(error_msg)
                 raise OSError(error_msg) from e
-            original_size = img.size
             
-            # Resize maintaining aspect ratio (thumbnail keeps aspect ratio)
-            img.thumbnail(self.max_image_size, Image.Resampling.LANCZOS)
-            
-            if self.debug_mode and img.size != original_size:
-                print(f"[Ollama] Resized image from {original_size} to {img.size}")
-            
-            # Save rescaled image to temp folder
-            if self.temp_folder:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-                rescaled_filename = f"rescaled_{timestamp}.jpg"
-                rescaled_path = os.path.join(self.temp_folder, rescaled_filename)
-                img.save(rescaled_path, format='JPEG', quality=85, optimize=True)
+            # Verify size - images should already be resized at capture time
+            # This is just a safety check in case an old/unresized image is passed
+            if img.size[0] > self.max_image_size[0] or img.size[1] > self.max_image_size[1]:
+                original_size = img.size
+                img.thumbnail(self.max_image_size, Image.Resampling.LANCZOS)
                 if self.debug_mode:
-                    print(f"[Ollama] Saved rescaled image to: {rescaled_path}")
+                    print(f"[Ollama] WARNING: Image was not resized at capture! Resized from {original_size} to {img.size}")
+            elif self.debug_mode:
+                print(f"[Ollama] Image already resized: {img.size} (max: {self.max_image_size})")
             
             # Convert to JPEG bytes (smaller than PNG)
             img_bytes = io.BytesIO()
@@ -421,7 +408,8 @@ class OllamaClient:
             raise
     
     def generate_vision(self, image_path: str, prompt: str, model_name: str, 
-                       stream: bool = False, repeat_penalty: Optional[float] = None) -> Dict[str, Any]:
+                       stream: bool = False, repeat_penalty: Optional[float] = None,
+                       check_cancelled: Optional[Callable[[], bool]] = None) -> Dict[str, Any]:
         """
         Generate response using vision-language model (single image).
         Uses /api/generate endpoint for single images (simpler format).
@@ -499,6 +487,13 @@ class OllamaClient:
                 chunk_count = 0
                 
                 for line in response.iter_lines():
+                    # Check if cancelled before processing each chunk
+                    if check_cancelled and check_cancelled():
+                        if self.debug_mode:
+                            print(f"\n[Ollama] Request cancelled by user")
+                        response.close()  # Close the connection
+                        raise InterruptedError("LLM request was cancelled (user changed page)")
+                    
                     if line:
                         chunk_count += 1
                         try:
@@ -622,7 +617,8 @@ class OllamaClient:
             raise
     
     def generate_vision_multi(self, image_paths: List[str], prompt: str, model_name: str, 
-                             stream: bool = False, repeat_penalty: Optional[float] = None) -> Dict[str, Any]:
+                             stream: bool = False, repeat_penalty: Optional[float] = None,
+                             check_cancelled: Optional[Callable[[], bool]] = None) -> Dict[str, Any]:
         """
         Generate response using vision-language model (multiple images).
         Uses /api/generate endpoint with images array.
@@ -729,6 +725,13 @@ class OllamaClient:
                 done_received = False
                 
                 for line in response.iter_lines():
+                    # Check if cancelled before processing each chunk
+                    if check_cancelled and check_cancelled():
+                        if self.debug_mode:
+                            print(f"\n[Ollama] Request cancelled by user")
+                        response.close()  # Close the connection
+                        raise InterruptedError("LLM request was cancelled (user changed page)")
+                    
                     if line:
                         try:
                             data = json.loads(line)
@@ -850,7 +853,7 @@ class OllamaClient:
     
     def generate_text(self, prompt: str, model_name: str, stream: bool = False, 
                       max_tokens: Optional[int] = None, temperature: Optional[float] = None,
-                      top_p: Optional[float] = None) -> Dict[str, Any]:
+                      top_p: Optional[float] = None, check_cancelled: Optional[Callable[[], bool]] = None) -> Dict[str, Any]:
         """
         Generate response using text-only model.
         

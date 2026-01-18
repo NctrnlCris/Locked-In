@@ -107,7 +107,6 @@ process_classification:
   - python.exe
   - pythonw.exe
   - java.exe
-  - javaw.exe
   - node.exe
   - npm.exe
   - yarn.exe
@@ -268,6 +267,7 @@ process_classification:
   - netflix.exe
   - primevideo.exe
   - steam.exe
+  - steamwebhelper.exe
   - epicgameslauncher.exe
   - battle.net.exe
   - goggalaxy.exe
@@ -275,6 +275,7 @@ process_classification:
   - eadesktop.exe
   - riotclientservices.exe
   - minecraftlauncher.exe
+  - gamingservicesui.exe
   - robloxplayerbeta.exe
   - leagueclient.exe
   - valorant.exe
@@ -362,4 +363,5 @@ process_classification:
   - kate.exe
   - geany.exe
   - brackets.exe
+  - javaw.exe
   monitor_timeout: 2
