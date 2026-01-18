@@ -4,3 +4,5 @@ profiles/
 profile_output/
 README.md
 config.json
+temp/screenshots/*.jpg
+temp/screenshots/*.JPG
