@@ -20,8 +20,8 @@ DEFAULT_PROFILE_NAME = "user_profile.json"
 # Setup questions for custom profile
 SETUP_QUESTIONS = [
     "What would you like to use this app for?",
-    "What is your background? (e.g., student, developer, writer)",
-    "What are your main things you want to focus on?",
+    "What is your background? (e.g., student, developer, writer) - Please specify your specific discipline of study",
+    "What are your main things you want to focus on? (What are you planning on working on, describe your project or task)",
     "What are things you want to prevent to be distraction-free?",
     "Is there anything particular that you want to whitelist that will be used when you focus?",
     "Is there anything that you want to be distraction-free from?"

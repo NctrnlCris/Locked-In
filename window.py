@@ -604,6 +604,7 @@ class MainPage(QWidget):
     def get_work_topic_from_profile(self) -> str:
         """
         Extract work topic from profile data.
+        Only uses Q3 response (work focus), never uses profile name.
         
         Returns:
             Work topic string, or default if not found
@@ -612,15 +613,15 @@ class MainPage(QWidget):
         if not main_window.profile_data:
             return "General work"
         
-        # Try to get from responses
+        # Only get from Q3 response - never use profile name
         responses = main_window.profile_data.get("responses", {})
         work_topic = responses.get("What are your main things you want to focus on?", "")
         
         if work_topic:
             return work_topic
         
-        # Fallback to profile name or default
-        return main_window.profile_data.get("name", "General work")
+        # Fallback to default - never use profile name
+        return "General work"
     
     def check_current_process(self):
         """Check the current foreground process - called by timer"""
