@@ -31,6 +31,7 @@ except ImportError:
     def get_all_profiles(): return []
     def load_profile(name): return None
     def get_profiles_index(): return {"profiles": []}
+    def get_all_sessions(): return []
     SetupWindow = None
 
 # Import process monitoring and popup
@@ -289,7 +290,7 @@ class ProfileSelectionPage(QWidget):
 class MainPage(QWidget):
     def __init__(self):
         super().__init__()
-        self.setStyleSheet("background-color: white;")
+        self.setStyleSheet(f"background-color: white;")
         self.monitoring_timer = QTimer()
         self.monitoring_timer.timeout.connect(self.check_current_process)
         self.session_timer = QTimer()
@@ -371,8 +372,7 @@ class MainPage(QWidget):
         self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         items = [
             ("Home", "assets/house.png"),
-            ("Sessions", "assets/sessions.png"),
-            ("Insights", "assets/insights.png")
+            ("Sessions", "assets/sessions.png")
         ]
         for text, icon_path in items:
             item = QListWidgetItem(QIcon(icon_path), text)
@@ -431,73 +431,199 @@ class MainPage(QWidget):
         # ---------- Main Content Area ----------
         content_container = QVBoxLayout()
         content_container.setContentsMargins(40, 30, 40, 30)
+        content_container.setSpacing(0)
         
         # Header Row
         header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 20)
         header = QLabel("Home")
         header.setStyleSheet(f"font-size: 32px; font-weight: bold; color: {DARK_GREEN}; background: transparent;")
         header_layout.addWidget(header)
         header_layout.addStretch()
         
+        # Icon with transparent background
         mini_p = QLabel()
-        mini_p.setPixmap(QPixmap("assets/logo.png").scaled(30, 30, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        logo_pixmap = QPixmap("assets/logo.png")
+        # Create a transparent version of the pixmap
+        transparent_pixmap = QPixmap(logo_pixmap.size())
+        transparent_pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(transparent_pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        painter.drawPixmap(0, 0, logo_pixmap)
+        painter.end()
+        mini_p.setPixmap(transparent_pixmap.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        mini_p.setStyleSheet("background-color: transparent; border: none;")
+        mini_p.setContentsMargins(0, 0, 0, 0)
         header_layout.addWidget(mini_p)
         content_container.addLayout(header_layout)
 
         # The Center Card
         self.card = QFrame()
-        self.card.setStyleSheet(f"background-color: {LIGHT_GRAY}; border-radius: 30px;")
+        self.card.setStyleSheet(f"background-color: {LIGHT_GRAY}; border-radius: 25px; padding: 0px;")
         card_layout = QHBoxLayout(self.card)
-        card_layout.setContentsMargins(20, 40, 20, 40)
+        card_layout.setContentsMargins(30, 35, 30, 35)
+        card_layout.setSpacing(25)
 
         # Penguin Image
         self.penguin_img = QLabel()
-        self.penguin_img.setPixmap(QPixmap("assets/sideways_penguin.png").scaledToWidth(220, Qt.TransformationMode.SmoothTransformation))
+        self.penguin_img.setPixmap(QPixmap("assets/sideways_penguin.png").scaledToWidth(200, Qt.TransformationMode.SmoothTransformation))
+        self.penguin_img.setStyleSheet("background-color: transparent;")
         card_layout.addWidget(self.penguin_img)
 
         # Text Section
         text_layout = QVBoxLayout()
-        self.greet = QLabel("Hey, user!")
-        self.greet.setStyleSheet(f"font-size: 36px; font-weight: bold; color: {DARK_GREEN};")
+        text_layout.setSpacing(10)
+        self.greet = QLabel("Hey, Profile!")
+        self.greet.setStyleSheet(f"font-size: 32px; font-weight: bold; color: {DARK_GREEN}; background: transparent; margin-bottom: 5px;")
         
         # Session timer (replaces streak count)
         self.streak = QLabel("00:00:00")
-        self.streak.setStyleSheet(f"font-size: 18px; color: {DARK_GREEN};")
+        self.streak.setStyleSheet(f"font-size: 18px; color: {DARK_GREEN}; background: transparent; margin-bottom: 10px;")
         self.streak.hide()  # Hidden until session starts
 
         prompt = QLabel("Start session?")
-        prompt.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {DARK_GREEN}; margin-top: 20px;")
-
-        # Toggle switch container
-        toggle_container = QHBoxLayout()
-        toggle_container.addStretch()
+        prompt.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {DARK_GREEN}; background: transparent;")
         
         self.toggle_switch = ToggleSwitch()
         self.toggle_switch.toggled.connect(self.on_toggle_switched)
-        toggle_container.addWidget(self.toggle_switch)
-        toggle_container.addStretch()
         
         text_layout.addWidget(self.greet)
         text_layout.addWidget(self.streak)  # Timer label (replaces streak)
-        text_layout.addWidget(prompt)
-        text_layout.addLayout(toggle_container)
+        
+        # Prompt and toggle in same row - aligned with "Hey, Profile!"
+        prompt_toggle_layout = QHBoxLayout()
+        prompt_toggle_layout.setContentsMargins(0, 0, 0, 0)
+        prompt_toggle_layout.setSpacing(10)
+        prompt_toggle_layout.addWidget(prompt)
+        prompt_toggle_layout.addWidget(self.toggle_switch)
+        prompt_toggle_layout.addStretch()
+        text_layout.addLayout(prompt_toggle_layout)
         card_layout.addLayout(text_layout)
         
-        content_container.addSpacing(20)
+        content_container.addSpacing(15)
         content_container.addWidget(self.card)
         
         self.view_more_link = QLabel("view more sessions >>")
         self.view_more_link.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.view_more_link.setStyleSheet(f"color: {DARK_GREEN}; font-weight: bold; background-color: transparent;")
+        self.view_more_link.setStyleSheet(f"color: {DARK_GREEN}; font-weight: bold; background-color: transparent; font-size: 14px; margin-top: 10px; padding: 5px;")
         self.view_more_link.mousePressEvent = lambda e: self.show_sessions_history()
         self.view_more_link.setCursor(Qt.CursorShape.PointingHandCursor)
         content_container.addWidget(self.view_more_link)
+        
+        # Recent Sessions Section
+        content_container.addSpacing(28)
+        recent_sessions_label = QLabel("Recent Sessions")
+        recent_sessions_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {DARK_GREEN}; background: transparent; margin-bottom: 15px; padding: 0px;")
+        content_container.addWidget(recent_sessions_label)
+        
+        # Container for recent sessions - aligned with "Recent Sessions" text
+        self.recent_sessions_container = QWidget()
+        self.recent_sessions_layout = QVBoxLayout(self.recent_sessions_container)
+        self.recent_sessions_layout.setSpacing(0)
+        self.recent_sessions_layout.setContentsMargins(0, 0, 0, 0)
+        content_container.addWidget(self.recent_sessions_container)
+        
+        # Load recent sessions
+        self.refresh_recent_sessions()
         
         content_container.addStretch()
         self.root.addLayout(content_container, 1)
 
     def update_profile(self, profile_name):
         self.greet.setText(f"Hey, {profile_name}!")
+    
+    def refresh_recent_sessions(self):
+        """Refresh the recent 3 sessions display on home page"""
+        # Clear existing sessions
+        while self.recent_sessions_layout.count():
+            child = self.recent_sessions_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        # Load sessions
+        try:
+            all_sessions = get_all_sessions()
+            # Get only the first 3 (most recent)
+            recent_sessions = all_sessions[:3]
+            
+            if not recent_sessions:
+                no_sessions = QLabel("No sessions yet. Start a monitoring session to see history here!")
+                no_sessions.setStyleSheet("font-size: 14px; color: gray; padding: 20px;")
+                no_sessions.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.recent_sessions_layout.addWidget(no_sessions)
+            else:
+                for session in recent_sessions:
+                    self.add_recent_session_card(session)
+        except Exception as e:
+            print(f"[ERROR] Failed to load recent sessions: {e}")
+            error_label = QLabel("Unable to load session history.")
+            error_label.setStyleSheet("font-size: 14px; color: gray; padding: 20px;")
+            self.recent_sessions_layout.addWidget(error_label)
+    
+    def add_recent_session_card(self, session):
+        """Add a session card to the recent sessions layout"""
+        # Add divider line before card (except for first one) with light gray spacing
+        if self.recent_sessions_layout.count() > 0:
+            # Add light gray spacing before divider
+            spacer = QWidget()
+            spacer.setFixedHeight(8)
+            spacer.setStyleSheet(f"background-color: {LIGHT_GRAY};")
+            self.recent_sessions_layout.addWidget(spacer)
+            
+            divider = QFrame()
+            divider.setFrameShape(QFrame.Shape.HLine)
+            divider.setFrameShadow(QFrame.Shadow.Sunken)
+            divider.setStyleSheet("color: black; background-color: black; max-height: 1px;")
+            self.recent_sessions_layout.addWidget(divider)
+            
+            # Add light gray spacing after divider
+            spacer2 = QWidget()
+            spacer2.setFixedHeight(8)
+            spacer2.setStyleSheet(f"background-color: {LIGHT_GRAY};")
+            self.recent_sessions_layout.addWidget(spacer2)
+        
+        # Card content - match home screen background (light gray)
+        card = QWidget()
+        card.setStyleSheet(f"background-color: {LIGHT_GRAY};")
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(8)
+        
+        # Duration - first item
+        duration = session.get("duration", "0:00")
+        duration_label = QLabel(duration)
+        duration_label.setStyleSheet(f"font-size: 14px; color: {DARK_GREEN}; font-weight: bold; background-color: transparent; min-width: 60px;")
+        card_layout.addWidget(duration_label)
+        
+        # Date and time
+        start_time = session.get("start_time", "")
+        date_label = QLabel(start_time)
+        date_label.setStyleSheet(f"font-size: 13px; color: black; background-color: transparent;")
+        card_layout.addWidget(date_label)
+        
+        card_layout.addStretch()
+        
+        # Popup clicks icon and count on the right
+        popup_clicks = session.get("popup_click_count", 0)
+        if popup_clicks > 0:
+            clicks_container = QHBoxLayout()
+            clicks_container.setSpacing(5)
+            clicks_container.setContentsMargins(0, 0, 0, 0)
+            
+            # Click icon (using text emoji or could use image)
+            click_icon = QLabel("👆")
+            click_icon.setStyleSheet(f"font-size: 14px; background-color: transparent;")
+            clicks_container.addWidget(click_icon)
+            
+            clicks_label = QLabel(str(popup_clicks))
+            clicks_label.setStyleSheet(f"font-size: 13px; color: {DARK_GREEN}; font-weight: bold; background-color: transparent;")
+            clicks_container.addWidget(clicks_label)
+            
+            clicks_widget = QWidget()
+            clicks_widget.setLayout(clicks_container)
+            card_layout.addWidget(clicks_widget)
+        
+        self.recent_sessions_layout.addWidget(card)
     
     def show_setup_window(self):
         """Open setup window to create a new profile"""
@@ -637,6 +763,8 @@ class MainPage(QWidget):
             try:
                 save_session(session_data)
                 print(f"[DEBUG] Session saved: {duration_str}, {self.session_distraction_count} distractions")
+                # Refresh recent sessions display to show the new session
+                self.refresh_recent_sessions()
             except Exception as e:
                 print(f"[ERROR] Failed to save session: {e}")
         
