@@ -1,1 +1,5 @@
 screenshot_data/
+_pycache_/
+profiles/
+profile_output/
+README.md
