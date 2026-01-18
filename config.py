@@ -20,6 +20,8 @@ SETUP_QUESTIONS = [
     "What would you like to use this app for?",
     "What is your background? (e.g., student, developer, writer)",
     "What are your main things you want to focus on?",
-    "What are things you want to prevent to be distraction-free?"
+    "What are things you want to prevent to be distraction-free?",
+    "Is there anything particular that you want to whitelist that will be used when you focus?",
+    "Is there anything that you want to be distraction-free from?"
 ]
 
