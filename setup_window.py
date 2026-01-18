@@ -14,55 +14,258 @@ from PyQt6.QtWidgets import QLineEdit
 import json
 
 class SetupModeSelectionPage(QWidget):
-    """Page for selecting between Pre-default and Custom setup"""
+    """Page for selecting between preset profiles and Custom setup"""
     def __init__(self, parent_window):
         super().__init__()
         self.parent_window = parent_window
         self.init_ui()
     
     def init_ui(self):
+        # Main layout with better spacing
         layout = QVBoxLayout()
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(12)
+        layout.setContentsMargins(30, 25, 30, 25)
         
+        # Welcome title with better styling
         title = QLabel("Welcome to Locked-In!")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 24px; font-weight: bold; margin: 20px;")
+        title.setStyleSheet("""
+            font-size: 28px; 
+            font-weight: bold; 
+            color: #0E6B4F;
+            margin: 10px 0;
+            padding: 5px;
+        """)
         
-        subtitle = QLabel("Choose your setup option:")
+        # Subtitle with description
+        subtitle = QLabel("Get started with a preset profile or create your own custom configuration")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setStyleSheet("font-size: 16px; margin: 10px;")
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet("""
+            font-size: 14px; 
+            color: #555;
+            margin: 5px 0;
+            padding: 0 15px;
+        """)
         
-        button_layout = QVBoxLayout()
-        button_layout.setSpacing(15)
+        # Preset profiles section
+        presets_label = QLabel("Quick Start Presets:")
+        presets_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        presets_label.setStyleSheet("font-size: 16px; font-weight: bold; margin-top: 10px; color: #333;")
         
-        # Pre-default button (placeholder for now)
-        predefault_btn = QPushButton("Pre-default")
-        predefault_btn.setMinimumHeight(50)
-        predefault_btn.setStyleSheet("font-size: 14px; padding: 10px;")
-        predefault_btn.clicked.connect(self.on_predefault_clicked)
+        # Preset buttons layout
+        preset_button_layout = QVBoxLayout()
+        preset_button_layout.setSpacing(8)
         
-        # Custom button
-        custom_btn = QPushButton("Custom")
-        custom_btn.setMinimumHeight(50)
-        custom_btn.setStyleSheet("font-size: 14px; padding: 10px;")
+        # CS Student preset button
+        cs_student_btn = QPushButton("💻 CS Student")
+        cs_student_btn.setMinimumHeight(45)
+        cs_student_btn.setMaximumHeight(45)
+        cs_student_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0E6B4F;
+                color: white;
+                font-size: 15px;
+                font-weight: bold;
+                padding: 8px;
+                border-radius: 8px;
+                border: 2px solid #0C5B44;
+            }
+            QPushButton:hover {
+                background-color: #0C5B44;
+                border-color: #0A4B34;
+            }
+            QPushButton:pressed {
+                background-color: #0A4B34;
+            }
+        """)
+        cs_student_btn.clicked.connect(self.on_cs_student_clicked)
+        
+        # Description for CS Student
+        cs_desc = QLabel("Perfect for programming assignments, algorithm study, and software development")
+        cs_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cs_desc.setStyleSheet("font-size: 11px; color: #666; margin: 8px 0 5px 0;")
+        cs_desc.setWordWrap(True)
+        
+        # Writer preset button
+        writer_btn = QPushButton("✍️ Writer")
+        writer_btn.setMinimumHeight(45)
+        writer_btn.setMaximumHeight(45)
+        writer_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0E6B4F;
+                color: white;
+                font-size: 15px;
+                font-weight: bold;
+                padding: 8px;
+                border-radius: 8px;
+                border: 2px solid #0C5B44;
+            }
+            QPushButton:hover {
+                background-color: #0C5B44;
+                border-color: #0A4B34;
+            }
+            QPushButton:pressed {
+                background-color: #0A4B34;
+            }
+        """)
+        writer_btn.clicked.connect(self.on_writer_clicked)
+        
+        # Description for Writer
+        writer_desc = QLabel("Ideal for writing articles, essays, creative writing, and content creation")
+        writer_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        writer_desc.setStyleSheet("font-size: 11px; color: #666; margin: 8px 0 8px 0;")
+        writer_desc.setWordWrap(True)
+        
+        # Divider
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.HLine)
+        divider.setFrameShadow(QFrame.Shadow.Sunken)
+        divider.setStyleSheet("color: #ddd; margin: 10px 0;")
+        
+        # Custom button section
+        custom_label = QLabel("Or create a custom profile:")
+        custom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        custom_label.setStyleSheet("font-size: 14px; color: #666; margin: 5px 0;")
+        
+        custom_btn = QPushButton("Custom Profile")
+        custom_btn.setMinimumHeight(45)
+        custom_btn.setMaximumHeight(45)
+        custom_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4A90E2;
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 8px;
+                border-radius: 8px;
+                border: 2px solid #357ABD;
+            }
+            QPushButton:hover {
+                background-color: #357ABD;
+                border-color: #2A6A9D;
+            }
+            QPushButton:pressed {
+                background-color: #2A6A9D;
+            }
+        """)
         custom_btn.clicked.connect(self.on_custom_clicked)
         
-        button_layout.addWidget(predefault_btn)
-        button_layout.addWidget(custom_btn)
-        button_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
+        # Build layout
+        layout.addStretch()
         layout.addWidget(title)
         layout.addWidget(subtitle)
-        layout.addStretch()
-        layout.addLayout(button_layout)
+        layout.addWidget(presets_label)
+        
+        preset_button_layout.addWidget(cs_student_btn)
+        preset_button_layout.addWidget(cs_desc)
+        preset_button_layout.addWidget(writer_btn)
+        preset_button_layout.addWidget(writer_desc)
+        preset_button_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        layout.addLayout(preset_button_layout)
+        layout.addWidget(divider)
+        layout.addWidget(custom_label)
+        layout.addWidget(custom_btn)
         layout.addStretch()
         
         self.setLayout(layout)
     
-    def on_predefault_clicked(self):
-        # Placeholder - teammate working on this
-        QMessageBox.information(self, "Pre-default", 
-                               "Pre-default setup will be available soon!")
+    def get_cs_student_preset(self):
+        """Get preset data for CS Student profile"""
+        return {
+            "name": "CS Student",
+            "responses": {
+                SETUP_QUESTIONS[0]: "Focusing on coding assignments, studying computer science concepts, and working on programming projects",
+                SETUP_QUESTIONS[1]: "Computer Science student",
+                SETUP_QUESTIONS[2]: "Programming assignments, algorithm study, software development projects, technical coursework",
+                SETUP_QUESTIONS[3]: "Social media, entertainment websites, non-essential apps during study time"
+            },
+            "whitelist": ["IDE", "terminal", "code editor", "compiler", "documentation sites", "github", "stackoverflow"],
+            "blacklist": ["social media", "games", "streaming services", "entertainment", "netflix", "youtube"]
+        }
+    
+    def get_writer_preset(self):
+        """Get preset data for Writer profile"""
+        return {
+            "name": "Writer",
+            "responses": {
+                SETUP_QUESTIONS[0]: "Writing articles, essays, creative writing, and maintaining focus during writing sessions",
+                SETUP_QUESTIONS[1]: "Writer, student, or content creator",
+                SETUP_QUESTIONS[2]: "Writing projects, research, editing, creative work",
+                SETUP_QUESTIONS[3]: "Social media, news websites, entertainment during writing hours"
+            },
+            "whitelist": ["word processor", "writing software", "research databases", "reference materials", "grammarly", "docs"],
+            "blacklist": ["social media", "news sites", "entertainment", "games", "twitter", "facebook"]
+        }
+    
+    def save_preset_profile(self, preset_data):
+        """Save a preset profile with pre-filled responses"""
+        profile_name = preset_data["name"]
+        responses = preset_data["responses"]
+        whitelist = preset_data["whitelist"]
+        blacklist = preset_data["blacklist"]
+        
+        # Combine all responses into a text format
+        combined_text = f"Profile: {profile_name}\n\n"
+        combined_text += "User Profile Setup Responses:\n\n"
+        for question, response in responses.items():
+            combined_text += f"Q: {question}\nA: {response}\n\n"
+        
+        # Add whitelist and blacklist to responses text
+        whitelist_question = SETUP_QUESTIONS[4] if len(SETUP_QUESTIONS) > 4 else None
+        blacklist_question = SETUP_QUESTIONS[5] if len(SETUP_QUESTIONS) > 5 else None
+        
+        if whitelist_question:
+            combined_text += f"Q: {whitelist_question}\nA: {', '.join(whitelist)}\n\n"
+            responses[whitelist_question] = ", ".join(whitelist)
+        
+        if blacklist_question:
+            combined_text += f"Q: {blacklist_question}\nA: {', '.join(blacklist)}\n\n"
+            responses[blacklist_question] = ", ".join(blacklist)
+        
+        # Save to .txt file with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = OUTPUT_DIR / f"{profile_name}_profile_responses_{timestamp}.txt"
+        
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(combined_text)
+            
+            # Save profile using profile manager
+            profile_data = {
+                "name": profile_name,
+                "setup_type": "preset",
+                "setup_completed": True,
+                "created": datetime.now().isoformat(),
+                "output_file": str(output_file),
+                "responses": responses,
+                "whitelist": whitelist,
+                "blacklist": blacklist
+            }
+            save_profile_to_manager(profile_name, profile_data)
+            
+            QMessageBox.information(self, "Profile Created!", 
+                                   f"'{profile_name}' profile has been created successfully!\n\n"
+                                   f"Responses saved to: {output_file}\n\n"
+                                   "The application will now start.")
+            
+            self.parent_window.setup_complete()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", 
+                               f"Error creating profile:\n{str(e)}\n\n"
+                               "Please try again.")
+    
+    def on_cs_student_clicked(self):
+        """Handle CS Student preset button click"""
+        preset_data = self.get_cs_student_preset()
+        self.save_preset_profile(preset_data)
+    
+    def on_writer_clicked(self):
+        """Handle Writer preset button click"""
+        preset_data = self.get_writer_preset()
+        self.save_preset_profile(preset_data)
     
     def on_custom_clicked(self):
         self.parent_window.switch_to_name_page()
@@ -475,7 +678,7 @@ class SetupWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Locked-In Setup")
-        self.setGeometry(200, 200, 700, 600)
+        self.setGeometry(200, 200, 550, 480)
         self.profile_name = None
         
         # Stacked widget for pages
