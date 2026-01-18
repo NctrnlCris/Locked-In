@@ -279,13 +279,34 @@ class ProfileSelectionPage(QWidget):
         setup_window = SetupWindow()
         setup_window.show()
         
-        # Connect to refresh when setup completes
-        def on_setup_complete():
+        # Connect to refresh and select profile when setup completes
+        def on_setup_complete(profile_name=None):
+            # Refresh profiles list
             self.refresh_profiles()
+            
+            # Auto-select the newly created profile
+            if profile_name:
+                print(f"[Profile] Auto-selecting newly created profile: {profile_name}")
+                # Small delay to ensure profile is saved
+                from PyQt6.QtCore import QTimer
+                def select_profile():
+                    if profile_name in get_all_profiles():
+                        self.select_profile(profile_name)
+                        print(f"[Profile] Successfully selected profile: {profile_name}")
+                    else:
+                        print(f"[Profile] Warning: Profile {profile_name} not found after creation")
+                
+                # Use QTimer to delay selection slightly to ensure file is written
+                QTimer.singleShot(100, select_profile)
         
-        # Note: This is a simple approach - in practice you might want to use signals
-        # For now, user will need to manually refresh or we'll refresh on next show
-        setup_window.setup_complete = lambda: (setup_window.close(), self.refresh_profiles())
+        # Override setup_complete to pass profile name
+        original_setup_complete = setup_window.setup_complete
+        def wrapped_setup_complete():
+            profile_name = getattr(setup_window, 'created_profile_name', None) or getattr(setup_window, 'profile_name', None)
+            original_setup_complete(profile_name)
+            on_setup_complete(profile_name)
+        
+        setup_window.setup_complete = wrapped_setup_complete
 
 class MainPage(QWidget):
     def __init__(self):
@@ -642,10 +663,15 @@ class MainPage(QWidget):
     
     def switch_to_profile_selection(self):
         """Switch to profile selection page"""
-        main_window = self.window()
-        if hasattr(main_window, 'profile_page'):
-            main_window.profile_page.refresh_profiles()
-            main_window.stacked_widget.setCurrentIndex(0)
+        try:
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'profile_page'):
+                main_window.profile_page.refresh_profiles()
+                main_window.stacked_widget.setCurrentIndex(0)
+        except Exception as e:
+            print(f"[ERROR] Error switching to profile selection: {e}")
+            import traceback
+            traceback.print_exc()
     
     def on_nav_item_clicked(self, item):
         """Handle navigation item clicks"""

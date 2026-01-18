@@ -224,13 +224,23 @@ def classify_processes_for_profile(
         if debug_mode:
             print(f"[ProcessClassifier] Split into {total_chunks} chunks of {chunk_size}")
         
+        # Notify progress callback that we're starting (chunk 0 of total)
+        if progress_callback:
+            try:
+                progress_callback(0, total_chunks)
+            except Exception as e:
+                logger.warning(f"Error calling progress callback: {e}")
+        
         # Track all classifications
         all_classifications = {}
         
         # Process each chunk
         for i, chunk in enumerate(chunks):
             if progress_callback:
-                progress_callback(i + 1, total_chunks)
+                try:
+                    progress_callback(i + 1, total_chunks)
+                except Exception as e:
+                    logger.warning(f"Error calling progress callback: {e}")
             
             if debug_mode:
                 print(f"[ProcessClassifier] Processing chunk {i + 1}/{total_chunks}...")

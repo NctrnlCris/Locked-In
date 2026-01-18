@@ -149,7 +149,7 @@ class SetupModeSelectionPage(QWidget):
         writer_btn.clicked.connect(self.on_writer_clicked)
         
         # Description for Writer
-        writer_desc = QLabel("Ideal for writing articles, essays, creative writing, and content creation")
+        writer_desc = QLabel("Ideal for writing tasks")
         writer_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         writer_desc.setStyleSheet("font-size: 11px; color: #666; margin: 8px 0 8px 0;")
         writer_desc.setWordWrap(True)
@@ -775,8 +775,14 @@ class CustomSetupPage(QWidget):
                     print(f"[DEBUG] Restoring existing response: {self.responses[question][:50]}...")
                     self.input_area.setPlainText(self.responses[question])
                 else:
-                    print(f"[DEBUG] No existing response, clearing input")
-                    self.input_area.clear()
+                    # Prepopulate question 1 with default answer
+                    if self.current_question_index == 0:
+                        default_answer = "I want to minimize my distractions"
+                        print(f"[DEBUG] Prepopulating question 1 with default: '{default_answer}'")
+                        self.input_area.setPlainText(default_answer)
+                    else:
+                        print(f"[DEBUG] No existing response, clearing input")
+                        self.input_area.clear()
             
             # Update button text
             if self.current_question_index == len(SETUP_QUESTIONS) - 1:
@@ -944,18 +950,38 @@ class CustomSetupPage(QWidget):
         
         # Show progress dialog and start LLM classification
         print(f"[DEBUG] Creating progress dialog")
+        
+        # Create a more visible progress dialog
         self.progress_dialog = QProgressDialog(
-            "Analyzing your work preferences...\nThis may take a minute.",
+            "Analyzing your work preferences with AI...\nThis may take 1-2 minutes.\n\nPlease wait...",
             None,  # No cancel button
             0, 100,
             self
         )
-        self.progress_dialog.setWindowTitle("Setting Up Profile")
+        self.progress_dialog.setWindowTitle("Setting Up Profile - Analyzing Preferences")
         self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self.progress_dialog.setMinimumDuration(0)
-        self.progress_dialog.setValue(5)  # Show some initial progress
+        self.progress_dialog.setMinimumDuration(0)  # Show immediately
+        self.progress_dialog.setAutoClose(False)  # Don't auto-close
+        self.progress_dialog.setAutoReset(False)  # Don't auto-reset
+        self.progress_dialog.setMinimumWidth(400)  # Make it wider
+        self.progress_dialog.setMinimumHeight(150)  # Make it taller
+        
+        # Set initial progress
+        self.progress_dialog.setValue(0)
+        self.progress_dialog.setLabelText(
+            "Initializing AI analysis...\n\nThis will classify all applications based on your profile."
+        )
+        
+        # Force show and update
         self.progress_dialog.show()
-        print(f"[DEBUG] Progress dialog shown")
+        self.progress_dialog.raise_()  # Bring to front
+        self.progress_dialog.activateWindow()  # Activate window
+        
+        # Process events to ensure dialog is displayed
+        from PyQt6.QtWidgets import QApplication
+        QApplication.processEvents()
+        
+        print(f"[DEBUG] Progress dialog shown and activated")
         
         # Start classification worker
         print(f"[DEBUG] Creating ProcessClassifierWorker")
@@ -972,20 +998,71 @@ class CustomSetupPage(QWidget):
     def _on_classification_progress(self, current_chunk: int, total_chunks: int):
         """Update progress dialog during classification"""
         print(f"[DEBUG] Classification progress: {current_chunk}/{total_chunks}")
+        
+        # Handle initial progress (chunk 0 = starting)
+        if current_chunk == 0:
+            self.progress_dialog.setValue(5)
+            self.progress_dialog.setLabelText(
+                "Starting AI analysis...\n\n"
+                f"Preparing to analyze {total_chunks} batches of applications.\n"
+                "This may take 1-2 minutes."
+            )
+            from PyQt6.QtWidgets import QApplication
+            QApplication.processEvents()
+            return
+        
         # Map chunk progress to 5-95% range (leaving room for start/end)
-        progress = 5 + int((current_chunk / total_chunks) * 90)
+        if total_chunks > 0:
+            progress = 5 + int((current_chunk / total_chunks) * 90)
+        else:
+            progress = 5
+        
+        # Ensure progress is within bounds
+        progress = max(5, min(95, progress))
+        
+        # Update progress bar
         self.progress_dialog.setValue(progress)
+        
+        # Update label with detailed progress
+        percentage = int((current_chunk / total_chunks) * 100) if total_chunks > 0 else 0
         self.progress_dialog.setLabelText(
-            f"Analyzing your work preferences...\n"
-            f"Processing batch {current_chunk} of {total_chunks}"
+            f"Analyzing your work preferences with AI...\n\n"
+            f"Processing batch {current_chunk} of {total_chunks} ({percentage}%)\n"
+            f"Classifying applications as Work, Mixed, or Entertainment..."
         )
+        
+        # Force UI update
+        from PyQt6.QtWidgets import QApplication
+        QApplication.processEvents()
+        
+        print(f"[DEBUG] Progress updated to {progress}% ({current_chunk}/{total_chunks})")
     
     def _on_classification_complete(self, result: dict):
         """Handle classification completion and save profile"""
         print(f"\n[DEBUG] ========== _on_classification_complete called ==========")
         print(f"[DEBUG] Classification result: success={result.get('success')}, error={result.get('error')}")
         
+        # Update progress to 100% and show completion message
         self.progress_dialog.setValue(100)
+        if result.get('success'):
+            self.progress_dialog.setLabelText(
+                "Analysis complete!\n\n"
+                "Saving your profile..."
+            )
+        else:
+            self.progress_dialog.setLabelText(
+                "Analysis completed with warnings.\n\n"
+                "Using default classifications. Saving profile..."
+            )
+        
+        # Force UI update
+        from PyQt6.QtWidgets import QApplication
+        QApplication.processEvents()
+        
+        # Small delay to show completion, then close
+        import time
+        time.sleep(0.5)  # Brief pause to show 100%
+        
         self.progress_dialog.close()
         print(f"[DEBUG] Progress dialog closed")
         
@@ -1061,8 +1138,8 @@ class CustomSetupPage(QWidget):
                                    f"Responses saved to: {self.output_file}\n\n"
                                    "The application will now start.")
             
-            print(f"[DEBUG] Calling parent_window.setup_complete()")
-            self.parent_window.setup_complete()
+            print(f"[DEBUG] Calling parent_window.setup_complete() with profile_name: {profile_name}")
+            self.parent_window.setup_complete(profile_name)
             print(f"[DEBUG] ========== _on_classification_complete completed ==========\n")
             
         except Exception as e:
@@ -1106,7 +1183,9 @@ class SetupWindow(QMainWindow):
     def switch_to_name_page(self):
         self.stacked_widget.setCurrentWidget(self.name_page)
     
-    def setup_complete(self):
+    def setup_complete(self, profile_name=None):
         """Signal that setup is complete"""
+        # Store profile name for callback
+        self.created_profile_name = profile_name or getattr(self, 'profile_name', None)
         self.close()
 
