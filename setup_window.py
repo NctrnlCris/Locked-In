@@ -209,6 +209,15 @@ class CustomSetupPage(QWidget):
         else:
             self.next_btn.setText("Next")
     
+    def update_chat_display(self):
+        """Rebuild chat display from current responses"""
+        chat_text = ""
+        for i, question in enumerate(SETUP_QUESTIONS):
+            if question in self.responses:
+                chat_text += f"<b>Q:</b> {question}<br>"
+                chat_text += f"<b>A:</b> {self.responses[question]}<br><br>"
+        self.chat_display.setHtml(chat_text)
+    
     def on_next_clicked(self):
         response = self.input_area.toPlainText().strip()
         
@@ -217,13 +226,12 @@ class CustomSetupPage(QWidget):
                                "Please provide a response before continuing.")
             return
         
-        # Save response
+        # Save response (this will overwrite if already exists)
         question = SETUP_QUESTIONS[self.current_question_index]
         self.responses[question] = response
         
-        # Add to chat display
-        self.chat_display.append(f"<b>Q:</b> {question}")
-        self.chat_display.append(f"<b>A:</b> {response}\n")
+        # Rebuild chat display with all current responses (includes updated answer)
+        self.update_chat_display()
         
         # Clear input
         self.input_area.clear()
