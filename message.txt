@@ -1,0 +1,361 @@
+exe,category,product,use_hint
+chrome.exe,Browser,Google Chrome,Mixed
+msedge.exe,Browser,Microsoft Edge,Mixed
+firefox.exe,Browser,Mozilla Firefox,Mixed
+brave.exe,Browser,Brave,Mixed
+opera.exe,Browser,Opera,Mixed
+opera_gx.exe,Browser,Opera GX,Mixed
+vivaldi.exe,Browser,Vivaldi,Mixed
+maxthon.exe,Browser,Maxthon,Mixed
+waterfox.exe,Browser,Waterfox,Mixed
+palemoon.exe,Browser,Pale Moon,Mixed
+seamonkey.exe,Browser,SeaMonkey,Mixed
+avastbrowser.exe,Browser,Avast Secure Browser,Mixed
+avgbrowser.exe,Browser,AVG Secure Browser,Mixed
+ccleanerbrowser.exe,Browser,CCleaner Browser,Mixed
+yandex.exe,Browser,Yandex Browser,Mixed
+arc.exe,Browser,Arc Browser,Mixed
+sidekick.exe,Browser,Sidekick,Mixed
+wavebox.exe,Browser,Wavebox,Mixed
+station.exe,Browser,Station,Mixed
+ferdium.exe,Browser,Ferdium (electron web apps),Mixed
+franz.exe,Browser,Franz,Mixed
+webcatalog.exe,Browser,WebCatalog,Mixed
+msedgewebview2.exe,Web Runtime,WebView2 Runtime,System/Work
+webviewhost.exe,Web Runtime,WebView Host,System/Work
+applicationframehost.exe,Web Runtime,Windows UWP Host,System/Work
+runtimebroker.exe,Web Runtime,Windows Runtime Broker,System/Work
+electron.exe,Web Runtime,Electron app (generic),System/Work
+searchhost.exe,Web Runtime,Search Host,System/Work
+teams.exe,Collaboration,Microsoft Teams (classic),Mixed
+ms-teams.exe,Collaboration,Microsoft Teams (new),Mixed
+ms-teams_modulehost.exe,Collaboration,Microsoft Teams calling module host,Mixed
+slack.exe,Chat,Slack,Mixed
+discord.exe,Chat,Discord,Mixed
+zoom.exe,Meetings,Zoom,Mixed
+ciscojabber.exe,Chat/VoIP,Cisco Jabber,Mixed
+webex.exe,Meetings,Webex,Mixed
+skype.exe,Chat/VoIP,Skype,Mixed
+whatsapp.exe,Chat,WhatsApp Desktop,Mixed
+signal.exe,Chat,Signal Desktop,Mixed
+telegram.exe,Chat,Telegram Desktop,Mixed
+wechat.exe,Chat,WeChat,Mixed
+line.exe,Chat,LINE,Mixed
+viber.exe,Chat,Viber,Mixed
+outlook.exe,Email/Calendar,Microsoft Outlook (classic),Mixed
+olk.exe,Email/Calendar,Microsoft Outlook (new),Mixed
+thunderbird.exe,Email/Calendar,Mozilla Thunderbird,Mixed
+emclient.exe,Email/Calendar,eM Client,Mixed
+mailbird.exe,Email/Calendar,Mailbird,Mixed
+mailspring.exe,Email/Calendar,Mailspring,Mixed
+postbox.exe,Email/Calendar,Postbox,Mixed
+notion.exe,Collaboration,Notion,Mixed
+trello.exe,Collaboration,Trello,Mixed
+clickup.exe,Collaboration,ClickUp,Mixed
+monday.exe,Collaboration,monday.com,Mixed
+ringcentral.exe,Meetings,RingCentral,Mixed
+gotomeeting.exe,Meetings,GoTo Meeting,Mixed
+teamspeak.exe,Voice,TeamSpeak,Mixed
+mumble.exe,Voice,Mumble,Mixed
+obs64.exe,Streaming/Recording,OBS Studio,Entertainment
+winword.exe,Office,Microsoft Word,Work
+excel.exe,Office,Microsoft Excel,Work
+powerpnt.exe,Office,Microsoft PowerPoint,Work
+msaccess.exe,Office,Microsoft Access,Work
+onenote.exe,Office,Microsoft OneNote,Work
+onenotem.exe,Office,OneNote (legacy),Work
+visio.exe,Office,Microsoft Visio,Work
+project.exe,Office,Microsoft Project,Work
+publisher.exe,Office,Microsoft Publisher,Work
+pptview.exe,Office,PowerPoint Viewer,Work
+acrord32.exe,PDF,Adobe Acrobat Reader,Work
+acrobat.exe,PDF,Adobe Acrobat,Work
+foxitpdfreader.exe,PDF,Foxit PDF Reader,Work
+sumatrapdf.exe,PDF,SumatraPDF,Work
+pdfxedit.exe,PDF,PDF-XChange Editor,Work
+nitropdf.exe,PDF,Nitro PDF,Work
+pdfelement.exe,PDF,Wondershare PDFelement,Work
+mspub.exe,Office,Publisher (alt),Work
+notepad.exe,Text Editor,Windows Notepad,Work
+notepad++.exe,Text Editor,Notepad++,Work
+wordpad.exe,Text Editor,WordPad,Work
+sublime_text.exe,Text Editor,Sublime Text,Work
+atom.exe,Text Editor,Atom,Work
+typora.exe,Notes/Markdown,Typora,Work
+marktext.exe,Notes/Markdown,Mark Text,Work
+obsidian.exe,Notes/Knowledge,Obsidian,Work
+logseq.exe,Notes/Knowledge,Logseq,Work
+joplin.exe,Notes/Knowledge,Joplin,Work
+evernote.exe,Notes/Knowledge,Evernote,Work
+simplenote.exe,Notes/Knowledge,Simplenote,Work
+zettlr.exe,Notes/Markdown,Zettlr,Work
+standardnotes.exe,Notes/Knowledge,Standard Notes,Work
+sticky notes.exe,Notes/Knowledge,Sticky Notes,Work
+stikynot.exe,Notes/Knowledge,Sticky Notes (legacy),Work
+snippingtool.exe,Utility,Snipping Tool,System/Work
+screenclippinghost.exe,Utility,Screen clipping host,System/Work
+mspaint.exe,Utility,Paint,System/Work
+paintdotnet.exe,Utility,Paint.NET,System/Work
+photos.exe,Media,Windows Photos,Work
+photoshop.exe,Creative,Adobe Photoshop,Work
+gimp-2.10.exe,Creative,GIMP,Work
+krita.exe,Creative,Krita,Work
+inkscape.exe,Creative,Inkscape,Work
+xournalpp.exe,Notes/PDF,Xournal++,Mixed
+drawboardpdf.exe,Notes/PDF,Drawboard PDF,Mixed
+calibre.exe,Reading,Calibre,Work
+code.exe,IDE,Visual Studio Code,Work
+cursor.exe,IDE,Cursor,Work
+devenv.exe,IDE,Microsoft Visual Studio,Work
+vs_community.exe,IDE,Visual Studio Installer/Launcher,Work
+rider64.exe,IDE,JetBrains Rider,Work
+pycharm64.exe,IDE,JetBrains PyCharm,Work
+idea64.exe,IDE,IntelliJ IDEA,Work
+clion64.exe,IDE,JetBrains CLion,Work
+webstorm64.exe,IDE,JetBrains WebStorm,Work
+goland64.exe,IDE,JetBrains GoLand,Work
+datagrip64.exe,IDE,JetBrains DataGrip,Work
+phpstorm64.exe,IDE,JetBrains PhpStorm,Work
+rubymine64.exe,IDE,JetBrains RubyMine,Work
+fleet.exe,IDE,JetBrains Fleet,Work
+studio64.exe,IDE,Android Studio,Work
+eclipse.exe,IDE,Eclipse,Work
+netbeans64.exe,IDE,Apache NetBeans,Work
+rstudio.exe,IDE,RStudio,Work
+matlab.exe,IDE,MATLAB,Work
+spyder.exe,IDE,Spyder,Work
+pyzo.exe,IDE,Pyzo,Work
+jupyterlab.exe,IDE,JupyterLab Desktop,Work
+anaconda-navigator.exe,Dev Tool,Anaconda Navigator,Work
+idle.exe,IDE,Python IDLE,Work
+arduino.exe,IDE,Arduino IDE,Work
+codeblocks.exe,IDE,Code::Blocks,Work
+qtcreator.exe,IDE,Qt Creator,Work
+emacs.exe,Text Editor,Emacs,Work
+gvim.exe,Text Editor,GVim,Work
+vim.exe,Text Editor,Vim,Work
+neovide.exe,Text Editor,Neovide,Mixed
+neovim.exe,Text Editor,Neovim,Mixed
+nvim-qt.exe,Text Editor,Neovim Qt,Mixed
+kate.exe,Text Editor,Kate,Mixed
+geany.exe,Text Editor,Geany,Mixed
+brackets.exe,Text Editor,Brackets,Mixed
+cmd.exe,Terminal,Command Prompt,Work
+powershell.exe,Terminal,Windows PowerShell,Work
+pwsh.exe,Terminal,PowerShell (7+),Work
+wt.exe,Terminal,Windows Terminal,Work
+windowsterminal.exe,Terminal,Windows Terminal (alt),Work
+bash.exe,Terminal,Bash (WSL),Work
+wsl.exe,Terminal,WSL,Work
+mintty.exe,Terminal,MinTTY (Git Bash/Cygwin),Work
+putty.exe,Terminal/SSH,PuTTY,Work
+kitty.exe,Terminal/SSH,KiTTY,Work
+securecrt.exe,Terminal/SSH,SecureCRT,Work
+termius.exe,Terminal/SSH,Termius,Work
+mobaxterm.exe,Terminal/SSH,MobaXterm,Work
+xshell.exe,Terminal/SSH,Xshell,Work
+winscp.exe,Terminal/SFTP,WinSCP,Work
+filezilla.exe,Terminal/SFTP,FileZilla,Work
+docker desktop.exe,Dev Tool,Docker Desktop,Work
+docker.exe,Dev Tool,Docker CLI,Work
+kubectl.exe,Dev Tool,Kubernetes kubectl,Work
+helm.exe,Dev Tool,Helm,Work
+terraform.exe,Dev Tool,Terraform,Work
+packer.exe,Dev Tool,Packer,Work
+vagrant.exe,Dev Tool,Vagrant,Work
+ansible.exe,Dev Tool,Ansible,Work
+python.exe,Runtime,Python,System/Work
+pythonw.exe,Runtime,Python (no console),System/Work
+java.exe,Runtime,Java,System/Work
+javaw.exe,Runtime,Java (no console),System/Work
+node.exe,Runtime,Node.js,System/Work
+npm.exe,Runtime,npm,System/Work
+yarn.exe,Runtime,Yarn,System/Work
+pnpm.exe,Runtime,pnpm,System/Work
+dotnet.exe,Runtime,dotnet,System/Work
+msbuild.exe,Dev Tool,MSBuild,Work
+nuget.exe,Dev Tool,NuGet,Work
+gradle.exe,Dev Tool,Gradle,Work
+mvn.exe,Dev Tool,Maven,Work
+cmake.exe,Dev Tool,CMake,Work
+ninja.exe,Dev Tool,Ninja,Work
+make.exe,Dev Tool,Make,Work
+git.exe,Dev Tool,Git,Work
+gh.exe,Dev Tool,GitHub CLI,Work
+glab.exe,Dev Tool,GitLab CLI,Work
+svn.exe,Dev Tool,Subversion,Work
+hg.exe,Dev Tool,Mercurial,Work
+tortoisegitproc.exe,Dev Tool,TortoiseGit,Work
+tortoiseproc.exe,Dev Tool,TortoiseSVN,Work
+githubdesktop.exe,Dev Tool,GitHub Desktop,Work
+sourcetree.exe,Dev Tool,Sourcetree,Work
+gitkraken.exe,Dev Tool,GitKraken,Work
+postman.exe,Dev Tool,Postman,Work
+insomnia.exe,Dev Tool,Insomnia,Work
+soapui.exe,Dev Tool,SoapUI,Work
+fiddler.exe,Dev Tool,Fiddler,Work
+wireshark.exe,Dev Tool,Wireshark,Work
+procexp.exe,Dev Tool,Process Explorer,Work
+procmon.exe,Dev Tool,Process Monitor,Work
+powerbi.exe,Data/BI,Microsoft Power BI Desktop,Work
+tableau.exe,Data/BI,Tableau,Work
+qliksense.exe,Data/BI,Qlik Sense,Work
+qlikview.exe,Data/BI,QlikView,Work
+spss.exe,Data/Stats,IBM SPSS Statistics,Work
+stata.exe,Data/Stats,Stata,Work
+sas.exe,Data/Stats,SAS,Work
+jmp.exe,Data/Stats,JMP,Work
+minitab.exe,Data/Stats,Minitab,Work
+mathematica.exe,Data/Math,Wolfram Mathematica,Work
+wolframkernel.exe,Data/Math,Wolfram Kernel,Work
+maple.exe,Data/Math,Maple,Work
+origin.exe,Data/Plotting,OriginLab Origin,Work
+prism.exe,Data/Plotting,GraphPad Prism,Work
+dbeaver.exe,Database,DBeaver,Work
+pgadmin4.exe,Database,pgAdmin 4,Work
+mysqlworkbench.exe,Database,MySQL Workbench,Work
+sqlworkbench64.exe,Database,SQL Workbench/J,Work
+ssms.exe,Database,SQL Server Management Studio,Work
+navicat.exe,Database,Navicat,Work
+heidisql.exe,Database,HeidiSQL,Work
+robo3t.exe,Database,Robo 3T (MongoDB),Work
+mongodbcompass.exe,Database,MongoDB Compass,Work
+redis-desktop-manager.exe,Database,Redis Desktop Manager,Work
+figma.exe,Design,Figma Desktop,Work
+canva.exe,Design,Canva Desktop,Work
+illustrator.exe,Creative,Adobe Illustrator,Work
+afterfx.exe,Creative,Adobe After Effects,Work
+premierepro.exe,Creative,Adobe Premiere Pro,Work
+lightroom.exe,Creative,Adobe Lightroom,Work
+indesign.exe,Creative,Adobe InDesign,Work
+xd.exe,Creative,Adobe XD,Work
+bridge.exe,Creative,Adobe Bridge,Work
+animate.exe,Creative,Adobe Animate,Work
+audition.exe,Creative,Adobe Audition,Work
+coreldrw.exe,Creative,CorelDRAW,Work
+affinityphoto.exe,Creative,Affinity Photo,Work
+affinitydesigner.exe,Creative,Affinity Designer,Work
+affinitypublisher.exe,Creative,Affinity Publisher,Work
+clipstudiopaint.exe,Creative,Clip Studio Paint,Work
+paintstormstudio.exe,Creative,PaintStorm Studio,Work
+blender.exe,3D,Blender,Work
+unrealeditor.exe,3D,Unreal Engine Editor,Work
+unity.exe,3D,Unity Editor,Work
+godot.exe,3D,Godot Engine,Work
+sketchup.exe,3D/CAD,SketchUp,Work
+fusion360.exe,3D/CAD,Autodesk Fusion 360,Work
+acad.exe,CAD,AutoCAD,Work
+revit.exe,CAD,Autodesk Revit,Work
+inventor.exe,CAD,Autodesk Inventor,Work
+sldworks.exe,CAD,SOLIDWORKS,Work
+rhino.exe,CAD,Rhinoceros 3D,Work
+cura.exe,3D Printing,Ultimaker Cura,Work
+prusa-slicer.exe,3D Printing,PrusaSlicer,Work
+chitubox.exe,3D Printing,ChiTuBox,Work
+resolve.exe,Creative,DaVinci Resolve (alt),Work
+audacity.exe,Audio,Audacity,Work
+reaper.exe,Audio,REAPER,Work
+fl64.exe,Audio,FL Studio,Work
+cubase.exe,Audio,Cubase,Work
+protools.exe,Audio,Pro Tools,Work
+streamlabs obs.exe,Streaming/Recording,Streamlabs Desktop,Work
+camtasia.exe,Recording,Camtasia,Work
+snagit64.exe,Recording,Snagit,Work
+snagit32.exe,Recording,Snagit (32-bit),Work
+mstsc.exe,Remote Access,Remote Desktop Connection,Work
+teamviewer.exe,Remote Access,TeamViewer,Work
+anydesk.exe,Remote Access,AnyDesk,Work  
+parsec.exe,Remote Access,Parsec,Work
+vncviewer.exe,Remote Access,VNC Viewer,Work
+rdcman.exe,Remote Access,RDCMan,Work
+vmware.exe,Virtualization,VMware Workstation,Work
+vmplayer.exe,Virtualization,VMware Player,Work
+virtualbox.exe,Virtualization,VirtualBox,Work
+vboxmanage.exe,Virtualization,VirtualBox Manager,Work
+hypervmanager.exe,Virtualization,Hyper-V Manager,Work
+vmconnect.exe,Virtualization,Hyper-V VMConnect,Work
+citrixreceiver.exe,Remote Access,Citrix Workspace/Receiver,Work
+wfica32.exe,Remote Access,Citrix ICA Client,Work
+onedrive.exe,Cloud Sync,Microsoft OneDrive,Work
+dropbox.exe,Cloud Sync,Dropbox,Work
+googledrivefs.exe,Cloud Sync,Google Drive for desktop,Work
+googledrivesync.exe,Cloud Sync,Google Drive (legacy sync),Work
+icloud.exe,Cloud Sync,iCloud,Work
+box.exe,Cloud Sync,Box,Work
+boxsync.exe,Cloud Sync,Box Sync,Work
+explorer.exe,System,Windows Explorer,Work
+taskmgr.exe,System,Task Manager,Work
+control.exe,System,Control Panel,Work
+systemsettings.exe,System,Windows Settings,Work
+regedit.exe,System,Registry Editor,Work
+mmc.exe,System,Microsoft Management Console,Work
+msconfig.exe,System,System Configuration,Work
+services.exe,System,Services,Work
+perfmon.exe,System,Performance Monitor,Work
+resmon.exe,System,Resource Monitor, Work
+7zfm.exe,Utility,7-Zip File Manager,Work
+winrar.exe,Utility,WinRAR,Work
+bandizip.exe,Utility,Bandizip,Work
+everything.exe,Utility,Everything search,Work
+powertoys.exe,Utility,PowerToys,Work
+sharex.exe,Utility,ShareX,Work
+greenshot.exe,Utility,Greenshot,Work
+lightshot.exe,Utility,Lightshot,Work
+spotify.exe,Media,Spotify,Entertainment
+itunes.exe,Media,iTunes,Entertainment
+applemusic.exe,Media,Apple Music,Entertainment
+vlc.exe,Media,VLC media player,Work
+wmplayer.exe,Media,Windows Media Player,Work
+mpv.exe,Media,mpv,Entertainment
+potplayer64.exe,Media,PotPlayer,Entertainment
+kmp.exe,Media,KMPlayer,Entertainment
+mpc-hc64.exe,Media,MPC-HC,Entertainment
+musicbee.exe,Media,MusicBee,Entertainment
+foobar2000.exe,Media,foobar2000,Entertainment
+plex.exe,Media,Plex,Entertainment
+jellyfin.exe,Media,Jellyfin,Entertainment
+netflix.exe,Media,Netflix (app/PWA),Entertainment
+primevideo.exe,Media,Prime Video (app/PWA),Entertainment
+steam.exe,Game Launcher,Steam,Entertainment
+epicgameslauncher.exe,Game Launcher,Epic Games Launcher,Entertainment
+battle.net.exe,Game Launcher,Battle.net,Entertainment
+goggalaxy.exe,Game Launcher,GOG Galaxy,Entertainment
+ubisoftconnect.exe,Game Launcher,Ubisoft Connect,Entertainment
+eadesktop.exe,Game Launcher,EA App,Entertainment
+riotclientservices.exe,Game Launcher,Riot Client,Entertainment
+minecraftlauncher.exe,Games,Minecraft Launcher,Entertainment
+robloxplayerbeta.exe,Games,Roblox,Entertainment
+leagueclient.exe,Games,League of Legends Client,Entertainment
+valorant.exe,Games,VALORANT (launcher),Entertainment
+cs2.exe,Games,Counter-Strike 2,Entertainment
+dota2.exe,Games,Dota 2,Entertainment
+fortniteclient-win64-shipping.exe,Games,Fortnite,Entertainment
+gta5.exe,Games,Grand Theft Auto V,Entertainment
+rdr2.exe,Games,Red Dead Redemption 2,Entertainment
+eldenring.exe,Games,Elden Ring,Entertainment
+starfield.exe,Games,Starfield,Entertainment
+cyberpunk2077.exe,Games,Cyberpunk 2077,Entertainment
+wow.exe,Games,World of Warcraft,Entertainment
+overwatch.exe,Games,Overwatch,Entertainment
+hearthstone.exe,Games,Hearthstone,Entertainment
+hades.exe,Games,Hades,Entertainment
+stardewvalley.exe,Games,Stardew Valley,Entertainment
+factorio.exe,Games,Factorio,Entertainment
+rimworldwin64.exe,Games,RimWorld,Entertainment
+terraria.exe,Games,Terraria,Entertainment
+amongus.exe,Games,Among Us,Entertainment
+rocketleague.exe,Games,Rocket League,Entertainment
+fallguys_client.exe,Games,Fall Guys,Entertainment
+apex.exe,Games,Apex Legends,Entertainment
+pubg.exe,Games,PUBG,Entertainment
+rainbowsix.exe,Games,Rainbow Six Siege,Entertainment
+destiny2.exe,Games,Destiny 2,Entertainment
+nordvpn.exe,VPN,NordVPN,Work
+expressvpn.exe,VPN,ExpressVPN,Work
+protonvpn.exe,VPN,Proton VPN,Work
+openvpn-gui.exe,VPN,OpenVPN GUI,Work
+wireguard.exe,VPN,WireGuard,Work
+ciscoanyconnect.exe,VPN,Cisco AnyConnect,Work
+forticlient.exe,VPN,FortiClient,Work
+zscaler.exe,VPN,Zscaler,Work
+globalprotect.exe,VPN,Palo Alto GlobalProtect,Work

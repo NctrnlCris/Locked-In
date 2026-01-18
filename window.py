@@ -35,21 +35,38 @@ except ImportError:
 
 # Import process monitoring and popup
 try:
-    from process_monitor import get_foreground_process_name, is_browser, is_in_blacklist, is_in_whitelist
+    from process_monitor import get_foreground_process_name, get_foreground_window_title, is_browser, is_in_blacklist, classify_process
     from penguin_popup import PenguinPopup
-    from screenshot_capture import capture_multiple_screenshots
+    from screenshot_capture import capture_multiple_screenshots, capture_single_screenshot
     PROCESS_MONITOR_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Process monitoring modules not available: {e}")
     def get_foreground_process_name(): 
         print("Warning: get_foreground_process_name() fallback used - modules not installed")
         return None
+    def get_foreground_window_title():
+        return None
     def is_browser(name): return False
     def is_in_blacklist(name, blacklist): return False
+    def classify_process(name, config=None): return 'unknown'
     def is_in_whitelist(name, whitelist): return False
     def capture_multiple_screenshots(count=3, duration=5): return []
+    def capture_single_screenshot(): return None
     PenguinPopup = None
     PROCESS_MONITOR_AVAILABLE = False
+
+# Import classification and VLM modules
+try:
+    from scripts.utils.mixed_process_monitor import MixedProcessMonitor
+    from scripts.utils.config import Config
+    from scripts.vlm.ministral_analyzer import analyze_screenshots
+    CLASSIFICATION_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Classification/VLM modules not available: {e}")
+    MixedProcessMonitor = None
+    Config = None
+    analyze_screenshots = None
+    CLASSIFICATION_AVAILABLE = False
 
 # --- UI Constants ---
 DARK_GREEN = "#0E6B4F"
@@ -239,6 +256,24 @@ class MainPage(QWidget):
         self.session_timer.timeout.connect(self.update_session_timer)
         self.is_monitoring = False
         self.current_popup = None  # Track current popup to prevent duplicates
+        self.previous_process_name = None  # Track previous process to detect changes
+        self.previous_classification = None  # Track previous classification to detect tabbing away
+        self.last_analyzed_key = None  # Track last analyzed process+window combination
+        self.last_analysis_result = None  # Track if last analysis was "not distracted"
+        
+        # Initialize classification and monitoring
+        if CLASSIFICATION_AVAILABLE and Config is not None and MixedProcessMonitor is not None:
+            try:
+                self.config = Config()
+                timeout = self.config.monitor_timeout
+                self.mixed_process_monitor = MixedProcessMonitor(timeout_seconds=timeout)
+            except Exception as e:
+                print(f"Warning: Could not initialize classification system: {e}")
+                self.config = None
+                self.mixed_process_monitor = None
+        else:
+            self.config = None
+            self.mixed_process_monitor = None
         
         # Session tracking
         self.session_start_time = None
@@ -524,6 +559,17 @@ class MainPage(QWidget):
         self.session_timer.stop()
         self.is_monitoring = False
         
+        # Reset tracking variables
+        self.previous_process_name = None
+        self.previous_classification = None
+        self.last_analyzed_key = None
+        self.last_analysis_result = None
+        if self.mixed_process_monitor is not None:
+            self.mixed_process_monitor.reset()
+        
+        # Update button states
+        self.start_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
         # Hide timer
         self.streak.hide()
         self.streak.setText("00:00:00")
@@ -553,7 +599,28 @@ class MainPage(QWidget):
             except Exception as e:
                 print(f"[ERROR] Failed to save session: {e}")
         
-        print("[DEBUG] Monitoring stopped")
+        print("[DEBUG] Monitoring stopped - all timers reset")
+    
+    def get_work_topic_from_profile(self) -> str:
+        """
+        Extract work topic from profile data.
+        
+        Returns:
+            Work topic string, or default if not found
+        """
+        main_window = self.window()
+        if not main_window.profile_data:
+            return "General work"
+        
+        # Try to get from responses
+        responses = main_window.profile_data.get("responses", {})
+        work_topic = responses.get("What are your main things you want to focus on?", "")
+        
+        if work_topic:
+            return work_topic
+        
+        # Fallback to profile name or default
+        return main_window.profile_data.get("name", "General work")
     
     def check_current_process(self):
         """Check the current foreground process - called by timer"""
@@ -574,35 +641,318 @@ class MainPage(QWidget):
             # Silently skip if we can't detect process (don't spam error messages)
             return
         
-        # If popup is showing, check if we should close it (switched to whitelist or browser)
-        if self.current_popup is not None and self.current_popup.isVisible():
-            # Close popup if switched to whitelisted process
-            if is_in_whitelist(process_name, whitelist):
-                print(f"[DEBUG] Process '{process_name}' is whitelisted - closing popup")
-                self.current_popup.close()
-                self.current_popup = None
-                return
-            
-            # Close popup if switched to browser (browsers are handled separately)
-            if is_browser(process_name):
-                print(f"[DEBUG] Process '{process_name}' is a browser - closing popup")
-                self.current_popup.close()
-                self.current_popup = None
-                # Continue to browser handling below
+        # Detect process change
+        process_changed = (process_name != self.previous_process_name)
+        self.previous_process_name = process_name
         
-        # Check if process is in blacklist
+        # Priority 1: Check if process is in profile blacklist (takes precedence)
         if is_in_blacklist(process_name, blacklist):
-            print(f"[DEBUG] Process '{process_name}' matched blacklist!")
+            print(f"[DEBUG] Process '{process_name}' matched profile blacklist!")
             # Only show popup if one isn't already showing
             if self.current_popup is None or not self.current_popup.isVisible():
                 self.show_penguin_popup(process_name, blacklist)
             return
         
-        # Check if it's a browser - if so, we need to check for unproductive sites
+        # Priority 2: Classify process using config system
+        if CLASSIFICATION_AVAILABLE and self.config is not None:
+            classification = classify_process(process_name, self.config)
+            
+            # Get window title for debug output
+            try:
+                window_title = get_foreground_window_title()
+                if window_title:
+                    print(f"[DEBUG] Process '{process_name}' (Window: '{window_title}') classified as: {classification}")
+                else:
+                    print(f"[DEBUG] Process '{process_name}' classified as: {classification}")
+            except Exception:
+                print(f"[DEBUG] Process '{process_name}' classified as: {classification}")
+            
+            # Check if user tabbed away from Mixed/Unknown process
+            if self.previous_classification in ['mixed', 'unknown'] and classification not in ['mixed', 'unknown']:
+                print(f"[DEBUG] User tabbed away from {self.previous_classification} process, resetting timer")
+                if self.mixed_process_monitor is not None:
+                    self.mixed_process_monitor.reset()
+                    print(f"[DEBUG] Timer reset - no longer tracking {self.previous_classification} process")
+            
+            # Update previous classification
+            self.previous_classification = classification
+            
+            # Handle based on classification
+            if classification == 'entertainment':
+                # Entertainment process - show popup immediately
+                try:
+                    window_title = get_foreground_window_title()
+                    if window_title:
+                        print(f"[DEBUG] Entertainment process detected: {process_name} (Window: '{window_title}')")
+                    else:
+                        print(f"[DEBUG] Entertainment process detected: {process_name}")
+                except Exception:
+                    print(f"[DEBUG] Entertainment process detected: {process_name}")
+                if self.current_popup is None or not self.current_popup.isVisible():
+                    self.show_penguin_popup(process_name, [])
+                return
+            
+            elif classification == 'work':
+                # Work process - allow (no action)
+                try:
+                    window_title = get_foreground_window_title()
+                    if window_title:
+                        print(f"[DEBUG] Work process allowed: {process_name} (Window: '{window_title}')")
+                    else:
+                        print(f"[DEBUG] Work process allowed: {process_name}")
+                except Exception:
+                    print(f"[DEBUG] Work process allowed: {process_name}")
+                return
+            
+            elif classification == 'mixed':
+                # Mixed process - monitor with timer
+                if self.mixed_process_monitor is not None:
+                    # Get window title to create unique key
+                    try:
+                        window_title = get_foreground_window_title() or ""
+                    except Exception:
+                        window_title = ""
+                    
+                    # Create unique key for this process+window combination
+                    current_key = f"{process_name}|{window_title}"
+                    
+                    # Check if this is a new Mixed process or window (first time detected or changed)
+                    if process_changed or (self.last_analyzed_key is None) or (current_key != self.last_analyzed_key):
+                        # Reset analysis tracking when process or window changes
+                        if self.last_analyzed_key is not None and current_key != self.last_analyzed_key:
+                            print(f"[DEBUG] Process or window changed, resetting analysis tracking")
+                            self.last_analyzed_key = None
+                            self.last_analysis_result = None
+                        
+                        # Take screenshot when Mixed process is first identified or window changes
+                        try:
+                            print(f"[SCREENSHOT] Capturing screenshot for newly detected Mixed process: {process_name}")
+                            screenshot_path = capture_single_screenshot()
+                            if screenshot_path:
+                                print(f"[SCREENSHOT] Screenshot saved to: {screenshot_path}")
+                            else:
+                                print(f"[SCREENSHOT] Warning: Screenshot capture returned None")
+                        except Exception as e:
+                            print(f"[SCREENSHOT] Error capturing screenshot: {e}")
+                        
+                        # Set the key to prevent continuous resets (but don't set analysis result yet)
+                        if self.last_analyzed_key is None:
+                            self.last_analyzed_key = current_key
+                    
+                    self.mixed_process_monitor.update_process(process_name, classification)
+                    
+                    # Check if timer exceeded and we should run VLM analysis
+                    # Only analyze if we haven't already determined this process+window is not distracted
+                    if self.mixed_process_monitor.should_check():
+                        # Skip if we've already analyzed this exact process+window and it wasn't distracted
+                        if self.last_analyzed_key == current_key and self.last_analysis_result == False:
+                            print(f"[DEBUG] Skipping VLM analysis - already determined '{process_name}' with window '{window_title}' is not distracted")
+                            print(f"[DEBUG] Timer will restart only when process or window changes")
+                            # Reset timer but keep the analysis result
+                            self.mixed_process_monitor.reset()
+                            return
+                        
+                        print(f"[DEBUG] Mixed process timer exceeded for: {process_name}")
+                        # Capture screenshot and analyze with VLM
+                        try:
+                            print(f"[SCREENSHOT] Capturing screenshot for VLM analysis (timer exceeded): {process_name}")
+                            screenshot_path = capture_single_screenshot()
+                            if screenshot_path:
+                                print(f"[SCREENSHOT] Screenshot saved to: {screenshot_path}")
+                            else:
+                                print(f"[SCREENSHOT] Warning: Screenshot capture returned None")
+                            
+                            if screenshot_path and analyze_screenshots is not None:
+                                work_topic = self.get_work_topic_from_profile()
+                                
+                                # Build context info with window title
+                                if window_title:
+                                    context_info = f"Process: {process_name}, Window Title: {window_title}"
+                                    print(f"[VLM] Running VLM analysis for {process_name} (Title: {window_title})...")
+                                else:
+                                    context_info = f"Process: {process_name}"
+                                    print(f"[VLM] Running VLM analysis for {process_name}...")
+                                
+                                result = analyze_screenshots(
+                                    image_paths=[str(screenshot_path)],
+                                    work_topic=work_topic,
+                                    additional_context=context_info,
+                                    debug_mode=True  # Enable debug mode to see reasoning
+                                )
+                                
+                                # Check if distracted
+                                if result.get('stage2', {}).get('distracted', False):
+                                    confidence = result.get('stage2', {}).get('confidence', 0)
+                                    print(f"[VLM] Detected distraction (confidence: {confidence}%)")
+                                    
+                                    # Verify we're still on the same distracting page before showing popup
+                                    try:
+                                        current_process_check = get_foreground_process_name()
+                                        current_window_check = get_foreground_window_title() or ""
+                                        current_key_check = f"{current_process_check}|{current_window_check}"
+                                        
+                                        if current_key_check == current_key:
+                                            # Still on the same page, show popup
+                                            self.last_analyzed_key = current_key
+                                            self.last_analysis_result = True  # Mark as distracted
+                                            if self.current_popup is None or not self.current_popup.isVisible():
+                                                self.show_penguin_popup(process_name, [])
+                                        else:
+                                            # User has navigated away, skip popup
+                                            print(f"[VLM] User navigated away from distracting page (was: {current_key}, now: {current_key_check}), skipping popup")
+                                            self.last_analyzed_key = current_key
+                                            self.last_analysis_result = True  # Still mark as distracted for tracking
+                                    except Exception as e:
+                                        print(f"[VLM] Error checking current process/window before popup: {e}")
+                                        # Fallback: show popup anyway if check fails
+                                        self.last_analyzed_key = current_key
+                                        self.last_analysis_result = True
+                                        if self.current_popup is None or not self.current_popup.isVisible():
+                                            self.show_penguin_popup(process_name, [])
+                                else:
+                                    print(f"[VLM] Determined not distracted - will not re-analyze until process or window changes")
+                                    self.last_analyzed_key = current_key
+                                    self.last_analysis_result = False  # Mark as not distracted
+                                
+                                # Reset timer after check
+                                self.mixed_process_monitor.reset()
+                        except Exception as e:
+                            print(f"[ERROR] VLM analysis failed: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            # Reset timer even on error to prevent infinite retries
+                            if self.mixed_process_monitor is not None:
+                                self.mixed_process_monitor.reset()
+                return
+            
+            elif classification == 'unknown':
+                # Unknown process - monitor with timer (same as Mixed)
+                if self.mixed_process_monitor is not None:
+                    # Get window title to create unique key
+                    try:
+                        window_title = get_foreground_window_title() or ""
+                    except Exception:
+                        window_title = ""
+                    
+                    # Create unique key for this process+window combination
+                    current_key = f"{process_name}|{window_title}"
+                    
+                    # Check if this is a new Unknown process or window (first time detected or changed)
+                    if process_changed or (self.last_analyzed_key is None) or (current_key != self.last_analyzed_key):
+                        # Reset analysis tracking when process or window changes
+                        if self.last_analyzed_key is not None and current_key != self.last_analyzed_key:
+                            print(f"[DEBUG] Process or window changed for Unknown process, resetting analysis tracking")
+                            self.last_analyzed_key = None
+                            self.last_analysis_result = None
+                        
+                        # Take screenshot when Unknown process is first identified or window changes
+                        try:
+                            print(f"[SCREENSHOT] Capturing screenshot for newly detected Unknown process: {process_name}")
+                            screenshot_path = capture_single_screenshot()
+                            if screenshot_path:
+                                print(f"[SCREENSHOT] Screenshot saved to: {screenshot_path}")
+                            else:
+                                print(f"[SCREENSHOT] Warning: Screenshot capture returned None")
+                        except Exception as e:
+                            print(f"[SCREENSHOT] Error capturing screenshot: {e}")
+                        
+                        # Set the key to prevent continuous resets (but don't set analysis result yet)
+                        if self.last_analyzed_key is None:
+                            self.last_analyzed_key = current_key
+                    
+                    self.mixed_process_monitor.update_process(process_name, classification)
+                    
+                    # Check if timer exceeded and we should run VLM analysis
+                    # Only analyze if we haven't already determined this process+window is not distracted
+                    if self.mixed_process_monitor.should_check():
+                        # Skip if we've already analyzed this exact process+window and it wasn't distracted
+                        if self.last_analyzed_key == current_key and self.last_analysis_result == False:
+                            print(f"[DEBUG] Skipping VLM analysis - already determined '{process_name}' with window '{window_title}' is not distracted")
+                            print(f"[DEBUG] Timer will restart only when process or window changes")
+                            # Reset timer but keep the analysis result
+                            self.mixed_process_monitor.reset()
+                            return
+                        
+                        print(f"[DEBUG] Unknown process timer exceeded for: {process_name}")
+                        # Capture screenshot and analyze with VLM
+                        try:
+                            print(f"[SCREENSHOT] Capturing screenshot for VLM analysis (timer exceeded): {process_name}")
+                            screenshot_path = capture_single_screenshot()
+                            if screenshot_path:
+                                print(f"[SCREENSHOT] Screenshot saved to: {screenshot_path}")
+                            else:
+                                print(f"[SCREENSHOT] Warning: Screenshot capture returned None")
+                            
+                            if screenshot_path and analyze_screenshots is not None:
+                                work_topic = self.get_work_topic_from_profile()
+                                
+                                # Build context info with window title
+                                if window_title:
+                                    context_info = f"Process: {process_name}, Window Title: {window_title}"
+                                    print(f"[VLM] Running VLM analysis for {process_name} (Title: {window_title})...")
+                                else:
+                                    context_info = f"Process: {process_name}"
+                                    print(f"[VLM] Running VLM analysis for {process_name}...")
+                                
+                                result = analyze_screenshots(
+                                    image_paths=[str(screenshot_path)],
+                                    work_topic=work_topic,
+                                    additional_context=context_info,
+                                    debug_mode=True  # Enable debug mode to see reasoning
+                                )
+                                
+                                # Check if distracted
+                                if result.get('stage2', {}).get('distracted', False):
+                                    confidence = result.get('stage2', {}).get('confidence', 0)
+                                    print(f"[VLM] Detected distraction (confidence: {confidence}%)")
+                                    
+                                    # Verify we're still on the same distracting page before showing popup
+                                    try:
+                                        current_process_check = get_foreground_process_name()
+                                        current_window_check = get_foreground_window_title() or ""
+                                        current_key_check = f"{current_process_check}|{current_window_check}"
+                                        
+                                        if current_key_check == current_key:
+                                            # Still on the same page, show popup
+                                            self.last_analyzed_key = current_key
+                                            self.last_analysis_result = True  # Mark as distracted
+                                            if self.current_popup is None or not self.current_popup.isVisible():
+                                                self.show_penguin_popup(process_name, [])
+                                        else:
+                                            # User has navigated away, skip popup
+                                            print(f"[VLM] User navigated away from distracting page (was: {current_key}, now: {current_key_check}), skipping popup")
+                                            self.last_analyzed_key = current_key
+                                            self.last_analysis_result = True  # Still mark as distracted for tracking
+                                    except Exception as e:
+                                        print(f"[VLM] Error checking current process/window before popup: {e}")
+                                        # Fallback: show popup anyway if check fails
+                                        self.last_analyzed_key = current_key
+                                        self.last_analysis_result = True
+                                        if self.current_popup is None or not self.current_popup.isVisible():
+                                            self.show_penguin_popup(process_name, [])
+                                else:
+                                    print(f"[VLM] Determined not distracted - will not re-analyze until process or window changes")
+                                    self.last_analyzed_key = current_key
+                                    self.last_analysis_result = False  # Mark as not distracted
+                                
+                                # Reset timer after check
+                                self.mixed_process_monitor.reset()
+                        except Exception as e:
+                            print(f"[ERROR] VLM analysis failed: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            # Reset timer even on error to prevent infinite retries
+                            if self.mixed_process_monitor is not None:
+                                self.mixed_process_monitor.reset()
+                return
+        
+        # Legacy: Check if it's a browser - if so, we need to check for unproductive sites
         if is_browser(process_name):
             # Capture 3 screenshots over 5 seconds for browser analysis
             # Note: This runs in background, we don't block here
+            print(f"[SCREENSHOT] Capturing multiple screenshots for browser analysis: {process_name}")
             screenshots = capture_multiple_screenshots(count=3, duration_seconds=5)
+            print(f"[SCREENSHOT] Captured {len(screenshots)} screenshots for browser analysis")
             
             # #TODO: Call model with screenshots to check if user is being unproductive
             # #TODO: from model_handler import check_unproductive_activity
@@ -828,6 +1178,38 @@ class MainWindow(QMainWindow):
         else:
             # No profiles or no config, show selector
             self.stacked_widget.setCurrentIndex(0)
+    
+    def closeEvent(self, event):
+        """Handle window close event - cleanup screenshots and stop monitoring"""
+        import shutil
+        
+        # Stop monitoring if active
+        if hasattr(self.main_page, 'monitoring_timer') and self.main_page.monitoring_timer.isActive():
+            self.main_page.monitoring_timer.stop()
+            print("[CLEANUP] Stopped monitoring timer")
+        
+        # Clear screenshot folder
+        screenshot_dir = Path("screenshot_data")
+        if screenshot_dir.exists() and screenshot_dir.is_dir():
+            try:
+                # Remove all files in the screenshot directory
+                for file_path in screenshot_dir.iterdir():
+                    if file_path.is_file():
+                        file_path.unlink()
+                        print(f"[CLEANUP] Deleted screenshot: {file_path.name}")
+                print(f"[CLEANUP] Cleared screenshot folder: {screenshot_dir}")
+            except Exception as e:
+                print(f"[CLEANUP] Error clearing screenshot folder: {e}")
+        
+        # Close any open popups
+        if hasattr(self.main_page, 'current_popup') and self.main_page.current_popup is not None:
+            try:
+                self.main_page.current_popup.close()
+            except Exception as e:
+                print(f"[CLEANUP] Error closing popup: {e}")
+        
+        # Call parent closeEvent
+        super().closeEvent(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
