@@ -28,7 +28,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 
 # Handle imports - make it work from different directories
 try:
@@ -208,7 +208,8 @@ def analyze_screenshots(
     model_name: str = "ministral-3:8b",
     debug_mode: bool = False,
     config: Optional[Config] = None,
-    additional_context: str = ''
+    additional_context: str = '',
+    check_cancelled: Optional[Callable[[], bool]] = None
 ) -> Dict[str, Any]:
     """
     Analyze multiple screenshots using two-stage ministral pipeline.
@@ -321,7 +322,8 @@ def analyze_screenshots(
                 prompt=stage1_prompt,
                 model_name=model_name,
                 stream=True,
-                repeat_penalty=config.stage1_repeat_penalty
+                repeat_penalty=config.stage1_repeat_penalty,
+                check_cancelled=check_cancelled
             )
         else:
             response = ollama_client.generate_vision_multi(
@@ -329,7 +331,8 @@ def analyze_screenshots(
                 prompt=stage1_prompt,
                 model_name=model_name,
                 stream=True,
-                repeat_penalty=config.stage1_repeat_penalty
+                repeat_penalty=config.stage1_repeat_penalty,
+                check_cancelled=check_cancelled
             )
         
         # Extract and parse Stage 1 response
@@ -462,27 +465,25 @@ def analyze_screenshots(
                 Screenshot History:
                 {desc_text}{context_section}
                 Based on this screenshot history, determine if the user is distracted from their work. Make sure to consider context of any videos they are watching if applicable. 
-                if educational and relevant to task or relative benchmarks/research, then it is not distraction.
+                if educational and relevant to task or relative benchmarks/research, then it is not distraction. Note that it must be in the same domain. If the user is reading something related to the
+                social sciences or history, and their work is coding, then it is a distraction. Similarly, if the user is reading something related to historic events on wikipedia, and their work is coding, then it is a distraction.
+                Note that any educational tools must be directly relevant. Not "generally cognitive in nature". Puzzle games are still distracting.
+                
+                Remember that the user is working on {work_topic}.
+
+
                 Note that we want to minimize false positives, thus unless you are almost 100% certain it is a distraction, you should
                 reason very carefully.
 
                 Note that you don't need to see a console or word file to confirm that they *were* working. They could just be looking things up like relevant studies, models, tools, or resources.
                 Your primary objective should be to monitor for game use or social media/communication, or if something is significantly different from their work.
 
-                Respond with ONLY a JSON object. Use this exact format:
+                Provide your detailed reasoning explaining what you see, why it might or might not be a distraction, and your thought process.
 
-                {{
-                    "Reasoning": "Your detailed reasoning here - explain what you see, why it might or might not be a distraction, and your thought process",
-                    "Distracted": true/false,
-                    "Confidence": 0-100
-                }}
-
-                IMPORTANT: 
-                - "Reasoning" must be a string explaining your thought process and analysis
-                - "Distracted" must be a boolean (true or false)
-                - "Confidence" must be a number between 0 and 100
-                - Return ONLY the JSON object, no other text
-                - Put your reasoning FIRST, then the conclusion"""
+                IMPORTANT: At the very end of your response, after all your reasoning, output exactly this format on its own line:
+                -Final Conclusion: Working
+                or
+                -Final Conclusion: Distracted"""
             
             # Display prompt in debug mode
             if debug_mode:
@@ -499,7 +500,8 @@ def analyze_screenshots(
                 stream=True,
                 max_tokens=400,  # Increased to allow for complete JSON with reasoning
                 temperature=0.3,
-                top_p=0.9
+                top_p=0.9,
+                check_cancelled=check_cancelled
             )
             
             # Parse Stage 2 response
@@ -519,321 +521,111 @@ def analyze_screenshots(
                 print("-" * 70)
             
             if stage2_text:
-                # Clean and parse Stage 2 JSON
+                # Extract status word ("Working" or "Distracted") from the response
+                # Look for the format "-Final Conclusion: {status}" at the end
                 cleaned_stage2 = stage2_text.strip()
-                cleaned_stage2 = re.sub(r'```json\s*', '', cleaned_stage2)
-                cleaned_stage2 = re.sub(r'```\s*', '', cleaned_stage2)
                 
-                # Try to parse the entire cleaned text first (most robust)
-                stage2_parsed = None
-                stage2_json_str = None
+                # Extract reasoning (everything before the status word)
+                status_word = None
+                reasoning = None
                 
-                try:
-                    stage2_parsed = json.loads(cleaned_stage2)
-                    stage2_json_str = cleaned_stage2
-                except json.JSONDecodeError:
-                    # If direct parse fails, try to extract JSON object using balanced braces
-                    def find_json_object(text):
-                        """Find the first complete JSON object by matching balanced braces."""
-                        start_idx = text.find('{')
-                        if start_idx == -1:
-                            return None
-                        
-                        brace_count = 0
-                        in_string = False
-                        escape_next = False
-                        
-                        for i in range(start_idx, len(text)):
-                            char = text[i]
-                            
-                            if escape_next:
-                                escape_next = False
-                                continue
-                            
-                            if char == '\\':
-                                escape_next = True
-                                continue
-                            
-                            if char == '"' and not escape_next:
-                                in_string = not in_string
-                                continue
-                            
-                            if not in_string:
-                                if char == '{':
-                                    brace_count += 1
-                                elif char == '}':
-                                    brace_count -= 1
-                                    if brace_count == 0:
-                                        return text[start_idx:i+1]
-                        
-                        return None
-                    
-                    # Try to find JSON object with balanced braces
-                    stage2_json_str = find_json_object(cleaned_stage2)
-                    
-                    if stage2_json_str:
-                        try:
-                            stage2_parsed = json.loads(stage2_json_str)
-                        except json.JSONDecodeError:
-                            stage2_json_str = None
-                    
-                    # Fallback to regex if balanced brace matching failed
-                    if not stage2_json_str:
-                        stage2_json_match = re.search(r'\{.*?"Reasoning".*?\}', cleaned_stage2, re.DOTALL | re.IGNORECASE)
-                        if not stage2_json_match:
-                            stage2_json_match = re.search(r'\{[^{}]*"Distracted"[^{}]*\}', cleaned_stage2, re.DOTALL | re.IGNORECASE)
-                        if not stage2_json_match:
-                            stage2_json_match = re.search(r'\{.*"Distracted".*\}', cleaned_stage2, re.DOTALL | re.IGNORECASE)
-                        
-                        if stage2_json_match:
-                            stage2_json_str = stage2_json_match.group(0)
-                            try:
-                                stage2_parsed = json.loads(stage2_json_str)
-                            except json.JSONDecodeError:
-                                stage2_parsed = None
+                # First, try to find the exact format "-Final Conclusion: {status}"
+                conclusion_pattern = re.search(r'-Final\s+Conclusion:\s*(Working|Distracted)', cleaned_stage2, re.IGNORECASE)
                 
-                if stage2_parsed:
-                    # Extract reasoning if present
-                    reasoning = None
-                    for key, value in stage2_parsed.items():
-                        key_lower = key.lower()
-                        if 'reason' in key_lower:
-                            reasoning = str(value)
-                            stage2_result['reasoning'] = reasoning
+                if conclusion_pattern:
+                    status_word = conclusion_pattern.group(1).capitalize()  # Normalize to "Working" or "Distracted"
+                    reasoning = cleaned_stage2[:conclusion_pattern.start()].strip()
+                else:
+                    # Fallback: Try to find "Working" or "Distracted" at the end of the response
+                    # Check last few lines for the status word
+                    lines = cleaned_stage2.split('\n')
+                    
+                    # Search from the end backwards for the status word
+                    for i in range(len(lines) - 1, max(-1, len(lines) - 10), -1):
+                        line = lines[i].strip()
+                        # Check for the format pattern
+                        line_match = re.search(r'-Final\s+Conclusion:\s*(Working|Distracted)', line, re.IGNORECASE)
+                        if line_match:
+                            status_word = line_match.group(1).capitalize()
+                            reasoning = '\n'.join(lines[:i]).strip()
+                            break
+                        elif line.upper() == "WORKING":
+                            status_word = "Working"
+                            reasoning = '\n'.join(lines[:i]).strip()
+                            break
+                        elif line.upper() == "DISTRACTED":
+                            status_word = "Distracted"
+                            reasoning = '\n'.join(lines[:i]).strip()
                             break
                     
-                    # Display reasoning in debug mode
-                    if debug_mode and reasoning:
-                        print(f"\n[VLM Stage 2] Reasoning:")
-                        print("-" * 70)
-                        print(reasoning)
-                        print("-" * 70)
+                    # If still not found, try regex search for standalone words
+                    if not status_word:
+                        # Look for "Working" or "Distracted" as standalone words (case-insensitive)
+                        working_match = re.search(r'\b(Working|WORKING)\b', cleaned_stage2, re.IGNORECASE)
+                        distracted_match = re.search(r'\b(Distracted|DISTRACTED)\b', cleaned_stage2, re.IGNORECASE)
+                        
+                        # Prefer the one that appears later in the text (closer to the end)
+                        if working_match and distracted_match:
+                            if working_match.end() > distracted_match.end():
+                                status_word = "Working"
+                                reasoning = cleaned_stage2[:working_match.start()].strip()
+                            else:
+                                status_word = "Distracted"
+                                reasoning = cleaned_stage2[:distracted_match.start()].strip()
+                        elif working_match:
+                            status_word = "Working"
+                            reasoning = cleaned_stage2[:working_match.start()].strip()
+                        elif distracted_match:
+                            status_word = "Distracted"
+                            reasoning = cleaned_stage2[:distracted_match.start()].strip()
+                
+                if status_word:
+                    # Set distracted based on status word
+                    stage2_result['distracted'] = (status_word == "Distracted")
                     
-                    # Extract values (case-insensitive)
-                    for key, value in stage2_parsed.items():
-                        key_lower = key.lower()
-                        if 'distract' in key_lower:
-                            stage2_result['distracted'] = bool(value)
-                        elif 'confid' in key_lower:
-                            stage2_result['confidence'] = int(value) if isinstance(value, (int, float)) else None
+                    # Store reasoning if found
+                    if reasoning:
+                        stage2_result['reasoning'] = reasoning
                     
-                    # Display conclusion in debug mode
+                    # Set a default confidence (we can't extract it from the word-only format)
+                    # Use a reasonable default or try to extract from reasoning if possible
+                    stage2_result['confidence'] = 85  # Default confidence when using word-only format
+                    
+                    # Try to extract confidence from reasoning if mentioned
+                    confidence_match = re.search(r'(\d+)%?\s*(?:confidence|certain)', reasoning or '', re.IGNORECASE)
+                    if confidence_match:
+                        try:
+                            stage2_result['confidence'] = int(confidence_match.group(1))
+                        except ValueError:
+                            pass
+                    
+                    # Display results in debug mode
                     if debug_mode:
+                        if reasoning:
+                            print(f"\n[VLM Stage 2] Reasoning:")
+                            print("-" * 70)
+                            print(reasoning)
+                            print("-" * 70)
                         print(f"\n[VLM Stage 2] Conclusion:")
+                        print(f"  - Status: {status_word}")
                         print(f"  - Distracted: {stage2_result['distracted']}")
                         print(f"  - Confidence: {stage2_result['confidence']}%")
                         print(f"{'='*70}\n")
                 else:
-                    # JSON parsing failed, try to reparse
-                    error_msg = "Failed to parse Stage 2 JSON"
+                    # Status word not found
+                    error_msg = "Could not find 'Working' or 'Distracted' status word in Stage 2 response"
                     errors.append(error_msg)
                     logger.warning(error_msg)
                     if debug_mode:
-                        print(f"[VLM Stage 2] JSON Parse Error: Could not extract valid JSON")
-                        if stage2_json_str:
-                            print(f"[VLM Stage 2] Attempted to parse: {stage2_json_str[:200]}...")
-                        print(f"[VLM Stage 2] Attempting to reparse...")
-                    
-                    # Try to reparse the response
-                    try:
-                        reparsed_json = reparse_json_response(
-                            raw_response=stage2_text,
-                            model_name=model_name,
-                            debug_mode=debug_mode,
-                            config=config,
-                            ollama_client=ollama_client
-                        )
-                        
-                        if reparsed_json:
-                            # Successfully reparsed - extract values
-                            reasoning = None
-                            for key, value in reparsed_json.items():
-                                key_lower = key.lower()
-                                if 'reason' in key_lower:
-                                    reasoning = str(value)
-                                    stage2_result['reasoning'] = reasoning
-                                    break
-                            
-                            # Display reasoning in debug mode
-                            if debug_mode and reasoning:
-                                print(f"\n[VLM Stage 2] Reasoning (from reparsed):")
-                                print("-" * 70)
-                                print(reasoning)
-                                print("-" * 70)
-                            
-                            # Extract values
-                            for key, value in reparsed_json.items():
-                                key_lower = key.lower()
-                                if 'distract' in key_lower:
-                                    stage2_result['distracted'] = bool(value)
-                                elif 'confid' in key_lower:
-                                    stage2_result['confidence'] = int(value) if isinstance(value, (int, float)) else None
-                            
-                            if debug_mode:
-                                print(f"[VLM Stage 2] Successfully reparsed JSON!")
-                                print(f"\n[VLM Stage 2] Conclusion:")
-                                print(f"  - Distracted: {stage2_result['distracted']}")
-                                print(f"  - Confidence: {stage2_result['confidence']}%")
-                                print(f"{'='*70}\n")
-                        else:
-                            if debug_mode:
-                                print(f"[VLM Stage 2] Reparse also failed")
-                    except Exception as e:
-                        if debug_mode:
-                            print(f"[VLM Stage 2] Error during reparse: {e}")
+                        print(f"[VLM Stage 2] Status Word Not Found")
+                        print(f"[VLM Stage 2] Response text: {stage2_text[:500]}...")
+                        print(f"[VLM Stage 2] Full response length: {len(stage2_text)} characters")
             else:
-                error_msg = "No JSON object found in Stage 2 response"
+                error_msg = "Empty Stage 2 response"
                 errors.append(error_msg)
                 logger.warning(error_msg)
                 if debug_mode:
-                    print(f"[VLM Stage 2] No JSON found in response")
-                    print(f"[VLM Stage 2] Response text: {stage2_text[:200]}...")
-                    print(f"[VLM Stage 2] Attempting to reparse...")
-                
-                # Try to reparse the entire response
-                try:
-                    reparsed_json = reparse_json_response(
-                        raw_response=stage2_text,
-                        model_name=model_name,
-                        debug_mode=debug_mode,
-                        config=config,
-                        ollama_client=ollama_client
-                    )
-                    
-                    if reparsed_json:
-                        # Successfully reparsed - extract values
-                        reasoning = None
-                        for key, value in reparsed_json.items():
-                            key_lower = key.lower()
-                            if 'reason' in key_lower:
-                                reasoning = str(value)
-                                stage2_result['reasoning'] = reasoning
-                                break
-                        
-                        # Display reasoning in debug mode
-                        if debug_mode and reasoning:
-                            print(f"\n[VLM Stage 2] Reasoning (from reparsed):")
-                            print("-" * 70)
-                            print(reasoning)
-                            print("-" * 70)
-                        
-                        # Extract values
-                        for key, value in reparsed_json.items():
-                            key_lower = key.lower()
-                            if 'distract' in key_lower:
-                                stage2_result['distracted'] = bool(value)
-                            elif 'confid' in key_lower:
-                                stage2_result['confidence'] = int(value) if isinstance(value, (int, float)) else None
-                        
-                        if debug_mode:
-                            print(f"[VLM Stage 2] Successfully reparsed JSON!")
-                            print(f"\n[VLM Stage 2] Conclusion:")
-                            print(f"  - Distracted: {stage2_result['distracted']}")
-                            print(f"  - Confidence: {stage2_result['confidence']}%")
-                            print(f"{'='*70}\n")
-                except Exception as e:
-                    if debug_mode:
-                        print(f"[VLM Stage 2] Error during reparse: {e}")
-                        error_msg = f"Failed to parse Stage 2 JSON: {e}"
-                        errors.append(error_msg)
-                        logger.warning(error_msg)
-                        if debug_mode:
-                            print(f"[VLM Stage 2] JSON Parse Error: {e}")
-                            print(f"[VLM Stage 2] Attempted to parse: {stage2_json_str[:200]}...")
-                            print(f"[VLM Stage 2] Attempting to reparse...")
-                        
-                        # Try to reparse the response
-                        reparsed_json = reparse_json_response(
-                            raw_response=stage2_text,
-                            model_name=model_name,
-                            debug_mode=debug_mode,
-                            config=config,
-                            ollama_client=ollama_client
-                        )
-                        
-                        if reparsed_json:
-                            # Successfully reparsed - extract values
-                            reasoning = None
-                            for key, value in reparsed_json.items():
-                                key_lower = key.lower()
-                                if 'reason' in key_lower:
-                                    reasoning = str(value)
-                                    stage2_result['reasoning'] = reasoning
-                                    break
-                            
-                            # Display reasoning in debug mode
-                            if debug_mode and reasoning:
-                                print(f"\n[VLM Stage 2] Reasoning (from reparsed):")
-                                print("-" * 70)
-                                print(reasoning)
-                                print("-" * 70)
-                            
-                            # Extract values
-                            for key, value in reparsed_json.items():
-                                key_lower = key.lower()
-                                if 'distract' in key_lower:
-                                    stage2_result['distracted'] = bool(value)
-                                elif 'confid' in key_lower:
-                                    stage2_result['confidence'] = int(value) if isinstance(value, (int, float)) else None
-                            
-                            if debug_mode:
-                                print(f"[VLM Stage 2] Successfully reparsed JSON!")
-                                print(f"\n[VLM Stage 2] Conclusion:")
-                                print(f"  - Distracted: {stage2_result['distracted']}")
-                                print(f"  - Confidence: {stage2_result['confidence']}%")
-                                print(f"{'='*70}\n")
-                        else:
-                            if debug_mode:
-                                print(f"[VLM Stage 2] Reparse also failed")
-                else:
-                    error_msg = "No JSON object found in Stage 2 response"
-                    errors.append(error_msg)
-                    logger.warning(error_msg)
-                    if debug_mode:
-                        print(f"[VLM Stage 2] No JSON found in response")
-                        print(f"[VLM Stage 2] Response text: {stage2_text[:200]}...")
-                        print(f"[VLM Stage 2] Attempting to reparse...")
-                    
-                    # Try to reparse the entire response
-                    reparsed_json = reparse_json_response(
-                        raw_response=stage2_text,
-                        model_name=model_name,
-                        debug_mode=debug_mode,
-                        config=config,
-                        ollama_client=ollama_client
-                    )
-                    
-                    if reparsed_json:
-                        # Successfully reparsed - extract values
-                        reasoning = None
-                        for key, value in reparsed_json.items():
-                            key_lower = key.lower()
-                            if 'reason' in key_lower:
-                                reasoning = str(value)
-                                stage2_result['reasoning'] = reasoning
-                                break
-                        
-                        # Display reasoning in debug mode
-                        if debug_mode and reasoning:
-                            print(f"\n[VLM Stage 2] Reasoning (from reparsed):")
-                            print("-" * 70)
-                            print(reasoning)
-                            print("-" * 70)
-                        
-                        # Extract values
-                        for key, value in reparsed_json.items():
-                            key_lower = key.lower()
-                            if 'distract' in key_lower:
-                                stage2_result['distracted'] = bool(value)
-                            elif 'confid' in key_lower:
-                                stage2_result['confidence'] = int(value) if isinstance(value, (int, float)) else None
-                        
-                        if debug_mode:
-                            print(f"[VLM Stage 2] Successfully reparsed JSON!")
-                            print(f"\n[VLM Stage 2] Conclusion:")
-                            print(f"  - Distracted: {stage2_result['distracted']}")
-                            print(f"  - Confidence: {stage2_result['confidence']}%")
-                            print(f"{'='*70}\n")
+                    print(f"[VLM Stage 2] Empty response received")
         except Exception as e:
             error_msg = f"Stage 2 error: {str(e)}"
             errors.append(error_msg)

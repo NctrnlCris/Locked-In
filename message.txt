@@ -140,6 +140,7 @@ nvim-qt.exe,Text Editor,Neovim Qt,Mixed
 kate.exe,Text Editor,Kate,Mixed
 geany.exe,Text Editor,Geany,Mixed
 brackets.exe,Text Editor,Brackets,Mixed
+javaw.exe,Runtime,Java (no console),Mixed
 cmd.exe,Terminal,Command Prompt,Work
 powershell.exe,Terminal,Windows PowerShell,Work
 pwsh.exe,Terminal,PowerShell (7+),Work
@@ -167,7 +168,6 @@ ansible.exe,Dev Tool,Ansible,Work
 python.exe,Runtime,Python,System/Work
 pythonw.exe,Runtime,Python (no console),System/Work
 java.exe,Runtime,Java,System/Work
-javaw.exe,Runtime,Java (no console),System/Work
 node.exe,Runtime,Node.js,System/Work
 npm.exe,Runtime,npm,System/Work
 yarn.exe,Runtime,Yarn,System/Work
@@ -317,6 +317,7 @@ jellyfin.exe,Media,Jellyfin,Entertainment
 netflix.exe,Media,Netflix (app/PWA),Entertainment
 primevideo.exe,Media,Prime Video (app/PWA),Entertainment
 steam.exe,Game Launcher,Steam,Entertainment
+steamwebhelper.exe,Game Launcher,Steam Web Helper,Entertainment
 epicgameslauncher.exe,Game Launcher,Epic Games Launcher,Entertainment
 battle.net.exe,Game Launcher,Battle.net,Entertainment
 goggalaxy.exe,Game Launcher,GOG Galaxy,Entertainment
@@ -324,6 +325,8 @@ ubisoftconnect.exe,Game Launcher,Ubisoft Connect,Entertainment
 eadesktop.exe,Game Launcher,EA App,Entertainment
 riotclientservices.exe,Game Launcher,Riot Client,Entertainment
 minecraftlauncher.exe,Games,Minecraft Launcher,Entertainment
+minecraft.exe,Games,Minecraft,Entertainment
+gamingservicesui.exe,Games,Gaming Services UI (Minecraft),Entertainment
 robloxplayerbeta.exe,Games,Roblox,Entertainment
 leagueclient.exe,Games,League of Legends Client,Entertainment
 valorant.exe,Games,VALORANT (launcher),Entertainment
