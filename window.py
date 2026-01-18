@@ -1,5 +1,4 @@
-from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton
-import sys
+from PyQt6.QtWidgets import QMainWindow, QPushButton
 from screenshot_capture import capture_screenshot
 
 
@@ -11,13 +10,3 @@ class MainWindow(QMainWindow):
         button = QPushButton("Capture Screenshot", self)
         button.clicked.connect(capture_screenshot)
         self.setCentralWidget(button)
-    
-
-    
-
-app = QApplication(sys.argv)
-
-window = MainWindow()
-window.show()
-
-app.exec()
